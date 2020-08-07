@@ -235,7 +235,7 @@ class Arg<T,CharT,detail::Case::number>:
      Arg(const String& shortKey,
          const String& longKey,
          bool required)
-     :BaseArg<CharT>(shortKey,longKey,required)
+     :Base(shortKey,longKey,required)
      {}
 
      T value() const

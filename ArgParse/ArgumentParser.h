@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <type_traits>
 #include <assert.h>
+
+#include <iostream>
 //----------------------------------------------------------------------------
 #include "ArgumentParserDetail.h"
 //----------------------------------------------------------------------------
@@ -135,41 +137,43 @@ bool ArgumentParser<CharT>::checkCount(BaseArg<CharT> *arg, std::size_t count)
   }
   return true;
 }
+
 //------------------------------------------------------------------
 template<typename CharT>
 template<typename Iter>
 Iter ArgumentParser<CharT>::pasrePositional(Iter first, Iter last)
 {
-  using namespace detail::literals;
-
-  std::size_t count= std::distance(first,last);
-  for(auto arg:positional_)
+  bool greedy = true;
+  std::size_t totalCount= std::distance(first,last);
+  for(auto pa=std::begin(positional_);  pa!=std::end(positional_); ++pa)
   {
-    arg->exists_= true;
+     (*pa)->exists_= true; // always exists for positional args
 
-    if(!checkCount(arg,count))
-    {
-      return last;
-    }
+     std::size_t remainderCount= 0;
+     std::for_each(std::next(pa),std::end(positional_),
+                   [&remainderCount](auto a){ remainderCount += a->minCount_;});
 
-    const std::size_t currentArgCount= std::min(count,arg->maxCount_);
-    last = std::next(first,currentArgCount);
-    for( ; first!=last; ++first)
-    {
-       if(!arg->tryAssignOrAppend(*first, errorString_))
-       {
-         return last;
-       }
-    }
-    count -= currentArgCount;
+     // the first posible arg must be greedy
+     std::size_t optimalCount = (*pa)->minCount_;
+     if((*pa)->maxCount_>(*pa)->minCount_ && greedy)
+     {
+       optimalCount = (*pa)->maxCount_;
+       greedy= false;
+     }
+
+     const std::size_t count= totalCount>remainderCount
+                              ? std::min( optimalCount, totalCount-remainderCount)
+                              : std::min( optimalCount, totalCount);
+
+     auto lastOfArg = std::next(first,count);
+     for(auto it=first; it!=lastOfArg; ++it)
+     {
+       if(!(*pa)->tryAssignOrAppend(*it, errorString_))
+         return it;
+     }
+     first= lastOfArg;
+     totalCount -= count;
   }
-
-  if(count)
-  {
-    errorString_ = "Error: unrecognized arguments: '"_lv+ (*first)+"'"_lv;
-    return last;
-  }
-
   return last;
 }
 //------------------------------------------------------------------
@@ -226,17 +230,17 @@ template<typename CharT>
 template<typename Iter>
 bool ArgumentParser<CharT>::parse(Iter first, Iter last)
 {
-  auto firstOptionIt =
-      std::find_if(first,last, detail::isOption<String>);
+  auto endItOfPositional = std::find_if(first,last,
+                                        [this](auto s)
+  {
+    return  detail::isOption<String>(s) ||
 
-  auto lastPositionalIt = pasrePositional(first,firstOptionIt);
-  if(hasError())
-    return false;
+            std::find_if(std::begin(subParsers_),std::end(subParsers_),
+                        [&s](auto parser){ return parser->name_==s; })
+            != std::end(subParsers_);
+  });
 
-  auto lastOptionalIt = parseOptional(firstOptionIt,last);
-  if(hasError())
-    return false;
-
+  auto it = pasrePositional(first,endItOfPositional);
   return true;
 }
 //------------------------------------------------------------------
