@@ -21,40 +21,32 @@ class BaseArg
 {
   public:
       typedef std::basic_string<CharT> String;
+      //typedef std::basic_string_view<CharT> StringView;
 
-      BaseArg(const String& shortKey,
-              const String& longKey,
+      BaseArg(const String& shortOption,
+              const String& longOption,
               bool required)
-        :shortKey_(shortKey),
-         longKey_(longKey),
+        :shortOption_(shortOption),
+         longOption_(longOption),
          required_(required)
       {}
 
       virtual ~BaseArg()=default;
 
-      void setDescription(const String& description){ description_= description; }
+      void setHelp(const String& help){ help_= help; }
       virtual bool hasValue()const=0;
 
       virtual bool exists()const { return exists_; } ;
       virtual const char* typeName()const= 0;
 
-      String name()
-      {
-        using namespace detail::literals;
-
-        if(shortKey_.empty() || longKey_.empty())
-          return shortKey_+longKey_;
-
-        return  shortKey_+"/"_lv+longKey_;
-      }
 
   protected:
       friend ArgumentParser<CharT>;
 
-      const String shortKey_;
-      const String longKey_;
+      const String shortOption_;
+      const String longOption_;
       bool required_ = false;
-      String description_;
+      String help_;
 
       bool exists_ = false;
 
@@ -62,7 +54,68 @@ class BaseArg
       std::size_t maxCount_= std::numeric_limits<std::size_t>::max();
 
       virtual bool tryAssignOrAppend(const String& str, String& error)=0;
+
+      String options()const;
+      String name()const;
+      String helpLine()const;
 };
+//---------------------------------------------------------------------------------------
+template<typename CharT>
+typename BaseArg<CharT>::String BaseArg<CharT>::options()const
+{
+  using namespace detail::literals;
+
+  if(shortOption_.empty())
+    return longOption_;
+
+  if(longOption_.empty())
+    return shortOption_;
+
+  return  shortOption_+"/"_lv+longOption_;
+}
+//---------------------------------------------------------------------------------------
+template<typename CharT>
+typename BaseArg<CharT>::String BaseArg<CharT>::name()const
+{
+  using namespace detail::literals;
+  String name_ = longOption_.empty()
+                 ?shortOption_
+                 :longOption_;
+
+  auto it = std::find_if_not(std::begin(name_),
+                             std::next(std::begin(name_),
+                                       std::min(2u,name_.size())),
+                             detail::isOptionPrefix<CharT>);
+  name_.erase(std::begin(name_),it);
+  if(maxCount_>1)
+     name_ += " ["_lv+name_+" ...]"_lv;
+  return  name_;
+}
+//---------------------------------------------------------------------------------------
+template<typename CharT>
+typename BaseArg<CharT>::String BaseArg<CharT>::helpLine()const
+{
+  using namespace detail::literals;
+
+  String helpLine;
+  if(!shortOption_.empty())
+    helpLine += shortOption_+" "_lv+name();
+
+
+  if(!longOption_.empty())
+  {
+    if(!helpLine.empty())
+       helpLine +=", "_lv;
+    helpLine += longOption_ +" "_lv+name();
+  }
+
+  if(!help_.empty())
+    helpLine += " "_lv+ help_;
+
+  return helpLine;
+}
+//---------------------------------------------------------------------------------------
+
 //---------------------------------------------------------------------------------------
 template< typename T, typename CharT,detail::Case case_>
 class ArgImpl
@@ -158,7 +211,7 @@ bool ArgImpl<T,CharT,case_>::tryAssignOrAppend(
   }
   catch (const std::invalid_argument& )
   {
-     error= "Error: argument '"_lv + this->name()+
+    error= "Error: argument '"_lv + this->options()+
             "': invalid "_lv       + detail::toStringT<CharT>(typeName())+
             " value: '"_lv + str+"'"_lv;;
     return false;
