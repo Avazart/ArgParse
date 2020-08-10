@@ -39,7 +39,6 @@ class BaseArg
       virtual bool exists()const { return exists_; } ;
       virtual const char* typeName()const= 0;
 
-
   protected:
       friend ArgumentParser<CharT>;
 
@@ -55,13 +54,13 @@ class BaseArg
 
       virtual bool tryAssignOrAppend(const String& str, String& error)=0;
 
-      String options()const;
-      String name()const;
-      String helpLine()const;
+      String makeOptions()const;
+      String makeParam()const;
+      String makeHelpLine()const;
 };
 //---------------------------------------------------------------------------------------
 template<typename CharT>
-typename BaseArg<CharT>::String BaseArg<CharT>::options()const
+typename BaseArg<CharT>::String BaseArg<CharT>::makeOptions()const
 {
   using namespace detail::literals;
 
@@ -75,7 +74,7 @@ typename BaseArg<CharT>::String BaseArg<CharT>::options()const
 }
 //---------------------------------------------------------------------------------------
 template<typename CharT>
-typename BaseArg<CharT>::String BaseArg<CharT>::name()const
+typename BaseArg<CharT>::String BaseArg<CharT>::makeParam()const
 {
   using namespace detail::literals;
   String name_ = longOption_.empty()
@@ -93,20 +92,20 @@ typename BaseArg<CharT>::String BaseArg<CharT>::name()const
 }
 //---------------------------------------------------------------------------------------
 template<typename CharT>
-typename BaseArg<CharT>::String BaseArg<CharT>::helpLine()const
+typename BaseArg<CharT>::String BaseArg<CharT>::makeHelpLine()const
 {
   using namespace detail::literals;
 
   String helpLine;
   if(!shortOption_.empty())
-    helpLine += shortOption_+" "_lv+name();
+    helpLine += shortOption_+" "_lv+makeParam();
 
 
   if(!longOption_.empty())
   {
     if(!helpLine.empty())
        helpLine +=", "_lv;
-    helpLine += longOption_ +" "_lv+name();
+    helpLine += longOption_ +" "_lv+makeParam();
   }
 
   if(!help_.empty())
@@ -195,7 +194,7 @@ bool ArgImpl<T,CharT,case_>::tryAssignOrAppend(
   }
   catch (const std::out_of_range&)
   {
-    error = "Error: argument '"_lv + this->name()+"' value: '"_lv+str+"' "_lv;
+    error = "Error: argument '"_lv + this->makeParam()+"' value: '"_lv+str+"' "_lv;
 
     if constexpr(case_==detail::Case::string ||
                  case_==detail::Case::strings)
@@ -211,7 +210,7 @@ bool ArgImpl<T,CharT,case_>::tryAssignOrAppend(
   }
   catch (const std::invalid_argument& )
   {
-    error= "Error: argument '"_lv + this->options()+
+    error= "Error: argument '"_lv + this->makeOptions()+
             "': invalid "_lv       + detail::toStringT<CharT>(typeName())+
             " value: '"_lv + str+"'"_lv;;
     return false;

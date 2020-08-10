@@ -60,6 +60,8 @@ class ArgumentParser
 
        String usage()const;
 
+       void setSubParserHelp(const String& help){ help_= help; };
+
    private:
        template <typename Iter>
        bool parse(Iter first,Iter last);
@@ -73,12 +75,16 @@ class ArgumentParser
        BaseArg<CharT>* getOptional(std::basic_string_view<CharT> argOption);
 
        bool checkCount(BaseArg<CharT>* arg,std::size_t count);
+
+       String makeSubParsersParam()const;
    private:
        std::vector<BaseArg<CharT>*> positional_;
        std::vector<BaseArg<CharT>*> optional_;
        std::vector<ArgumentParser*> subParsers_;
        String errorString_;
        String name_;
+       String help_;
+       String prefixChars_;
 };
 //------------------------------------------------------------------
 template<typename CharT>
@@ -99,7 +105,7 @@ bool ArgumentParser<CharT>::checkCount(BaseArg<CharT> *arg, std::size_t count)
   using namespace detail::literals;
   if(count < arg->minCount_) // || count > arg->maxCount_)
   {
-    errorString_= "Error: argument '"_lv+ arg->options()+
+    errorString_= "Error: argument '"_lv+ arg->makeOptions()+
                    "': expected values count: "_lv+
                    detail::toStringT<CharT>(std::to_string(arg->minCount_));
 
@@ -110,6 +116,7 @@ bool ArgumentParser<CharT>::checkCount(BaseArg<CharT> *arg, std::size_t count)
   }
   return true;
 }
+
 //------------------------------------------------------------------
 template<typename CharT>
 template<typename Iter>
@@ -189,7 +196,7 @@ Iter ArgumentParser<CharT>::parseOptional(Iter first, Iter last)
     if(arg->required_ && !arg->exists_)
     {
       using namespace detail::literals;
-      errorString_= "Error: the following argument are required:'"_lv+arg->name()+"'"_lv;
+      errorString_= "Error: the following argument are required:'"_lv+arg->makeParam()+"'"_lv;
       return first;
     }
   }
@@ -345,6 +352,22 @@ Arg<T, CharT, detail::CaseOfCharNArgV<T, CharT, nargs>> *
    static_assert( nargs=='?' || nargs=='*' || nargs=='+',
        "Error wrong nargs option!");
 }
+//------------------------------------------------------------------
+template<typename CharT>
+typename ArgumentParser<CharT>::String
+  ArgumentParser<CharT>::makeSubParsersParam() const
+{
+  using namespace detail::literals;
+  String params = "{"_lv;
+  for(std::size_t i=0; i<subParsers_.size(); ++i)
+  {
+    if(i>0)
+      params+= ","_lv;
+    params+= subParsers_[i]->name_;
+  }
+  params+= "}"_lv;
+  return params;
+}
 //----------------------------------------------------------------------------
 template<typename CharT>
 typename ArgumentParser<CharT>::String
@@ -356,11 +379,22 @@ typename ArgumentParser<CharT>::String
 
    helpStr += "\npositional arguments:\n"_lv;
    for(auto arg: positional_)
-       helpStr+= "  "_lv+arg->helpLine()+"\n"_lv;
+   //  if(!arg->help_.empty())
+       helpStr+= "  "_lv+arg->makeHelpLine()+"\n"_lv;
+
+   if(!subParsers_.empty())
+   {
+     helpStr+= "  "_lv+makeSubParsersParam()+"\n"_lv;
+     for(std::size_t i=0; i<subParsers_.size(); ++i)
+       if(!subParsers_[i]->help_.empty())
+          helpStr+= "  "_lv+ subParsers_[i]->name_ +" "_lv+
+                    "  "_lv+ subParsers_[i]->help_ +"\n"_lv;
+   }
 
    helpStr += "\noptional arguments:\n"_lv;
    for(auto arg: optional_)
-      helpStr+= "  "_lv+arg->helpLine()+"\n"_lv;
+   //  if(!arg->help_.empty())
+       helpStr+= "  "_lv+arg->makeHelpLine()+"\n"_lv;
 
    return helpStr;
 }
@@ -375,14 +409,15 @@ typename ArgumentParser<CharT>::String ArgumentParser<CharT>::usage() const
   {
     if(i>0)
       usageStr+= " "_lv;
-    usageStr+= "["_lv+ optional_[i]->shortOption_+" "_lv+optional_[i]->name()+"]"_lv;
+    usageStr+= "["_lv+ optional_[i]->shortOption_+" "_lv+
+                       optional_[i]->makeParam()+"]"_lv;
   }
 
   for(std::size_t i=0; i<positional_.size(); ++i)
   {
     if(i>0 || !usageStr.empty())
       usageStr+= " "_lv;
-    usageStr+= positional_[i]->name();
+    usageStr+= positional_[i]->makeParam();
   }
 
   if(subParsers_.empty())
@@ -391,14 +426,7 @@ typename ArgumentParser<CharT>::String ArgumentParser<CharT>::usage() const
   if(!usageStr.empty())
     usageStr+= " "_lv;
 
-  usageStr+= "{"_lv;
-  for(std::size_t i=0; i<subParsers_.size(); ++i)
-  {
-    if(i>0)
-      usageStr+= ","_lv;
-    usageStr+= subParsers_[i]->name_;
-  }
-  usageStr+= "}"_lv;
+   usageStr+= this->makeSubParsersParam();
 
   return usageStr;
 }

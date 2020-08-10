@@ -88,19 +88,21 @@ void test4()
   auto p1 = parser.addArgument<int,'+'>("p1","");
   p1->setHelp("positional");
 
-  auto o1 = parser.addArgument<int,'+'>("","--opt");
+  auto o1 = parser.addArgument<int,'+'>("-o","--opt");
   o1->setHelp("optional");
+
+  auto sub1 = parser.addSubParser("cmd1");
+  sub1->setSubParserHelp("sub parser #1");
+  auto c1 = sub1->addArgument<int>("c1");
+
+  auto sub2 = parser.addSubParser("cmd2");
+  auto c2 = sub2->addArgument<int>("c2");
+  sub2->setSubParserHelp("sub parser #2");
 
   std::cerr<< parser.usage() << std::endl;
   std::cerr<< parser.help()  << std::endl;
 
   return;
-
-//  auto sub1 = parser.addSubParser("cmd1");
-//  auto c1 = sub1->addArgument<int>("c1");
-
-//  auto sub2 = parser.addSubParser("cmd2");
-//  auto c2 = sub2->addArgument<int>("c2");
 
 //  const std::string cmdLine = R"(1 2 3 -o1 4 cmd3 5)";
 
