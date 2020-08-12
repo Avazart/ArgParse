@@ -116,7 +116,6 @@ bool ArgumentParser<CharT>::checkCount(BaseArg<CharT> *arg, std::size_t count)
   }
   return true;
 }
-
 //------------------------------------------------------------------
 template<typename CharT>
 template<typename Iter>
