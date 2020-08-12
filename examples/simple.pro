@@ -7,11 +7,11 @@ SOURCES += \
         main.cpp
 
 
-INCLUDEPATH+= ArgParse\
+INCLUDEPATH+= ../ArgParse/
 
 HEADERS += \
-  ArgParse/Arg.h \
-  ArgParse/ArgumentParser.h \
-  ArgParse/ArgumentParserDetail.h
+  ../ArgParse/Arg.h \
+  ../ArgParse/ArgumentParser.h \
+  ../ArgParse/ArgumentParserDetail.h
 
 
