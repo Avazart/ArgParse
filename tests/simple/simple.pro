@@ -6,14 +6,13 @@ CONFIG -= qt
 SOURCES += \
         main.cpp
 
+HEADERS += \
+  "../../ArgParse/Arg.h" \
+  "../../ArgParse/ArgumentParser.h" \
+  "../../ArgParse/ArgumentParserDetail.h"
 
 INCLUDEPATH+= ../ArgParse/ \
     "D:/Projects/Libs/MSVC/googletest/googletest/include/"
-
-HEADERS += \
-  ../ArgParse/Arg.h \
-  ../ArgParse/ArgumentParser.h \
-  ../ArgParse/ArgumentParserDetail.h \
 
 LIBS += -L"D:/Projects/Libs/MSVC/googletest/build/lib/Release" \
         -lgtest -lgtest_main

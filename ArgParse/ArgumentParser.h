@@ -62,6 +62,8 @@ class ArgumentParser
 
        void setSubParserHelp(const String& help){ help_= help; };
 
+       void reset();
+
    private:
        template <typename Iter>
        bool parse(Iter first,Iter last);
@@ -131,9 +133,13 @@ bool ArgumentParser<CharT>::pasrePositional(Iter first, Iter last)
      std::for_each(std::next(pa),std::end(positional_),
                    [&remainderCount](auto a){ remainderCount += a->minCount_;});
 
+     // +  if((*pa)->minCount_=1 && (*pa)->minCount_> (*pa)->maxCount_)
+     // ?
+     // *
+
      // the first posible arg must be greedy
-     std::size_t optimalCount = (*pa)->minCount_;
-     if(greedy && (*pa)->maxCount_>(*pa)->minCount_)
+     std::size_t optimalCount = std::max((*pa)->minCount_,1u);
+     if(greedy && (*pa)->maxCount_>(*pa)->minCount_ && (*pa)->minCount_!=0)
      {
        optimalCount = (*pa)->maxCount_;
        greedy= false;
@@ -427,7 +433,20 @@ typename ArgumentParser<CharT>::String ArgumentParser<CharT>::usage() const
 
    usageStr+= this->makeSubParsersParam();
 
-  return usageStr;
+   return usageStr;
+}
+//----------------------------------------------------------------------------
+template<typename CharT>
+void ArgumentParser<CharT>::reset()
+{
+  errorString_.clear();
+
+  for(auto optPtr:optional_)
+     optPtr->reset();
+  for(auto posPtr:positional_)
+     posPtr->reset();
+  for(auto parserPtr:subParsers_)
+     parserPtr->reset();
 }
 //----------------------------------------------------------------------------
 }

@@ -39,6 +39,8 @@ class BaseArg
       virtual bool exists()const { return exists_; } ;
       virtual const char* typeName()const= 0;
 
+      virtual void reset()=0;
+
   protected:
       friend ArgumentParser<CharT>;
 
@@ -143,15 +145,23 @@ class ArgImpl
      virtual bool hasValue()const override
      {
        if constexpr(isContainer)
-           return !storage_.empty();
+          return !storage_.empty();
        else
-           return storage_.has_value();
-     };
+          return storage_.has_value();
+     }
+
+     virtual void reset()override
+     {
+       if constexpr(isContainer)
+          storage_.clear();
+       else
+          storage_.reset();
+     }
 
      virtual const char* typeName()const override
      {
        return typeid (T).name();
-     };
+     }
 
      virtual bool tryAssignOrAppend(const String& str, String& error) override;
 
