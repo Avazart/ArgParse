@@ -2,6 +2,7 @@
 #define ARGUMENTPARSER_H
 //----------------------------------------------------------------------------
 #include <algorithm>
+#include <numeric>
 #include <type_traits>
 #include <assert.h>
 
@@ -28,7 +29,7 @@ class ArgumentParser
 
        ArgumentParser* addSubParser(const String& name);
 
-       // minCount maxCount
+       // minCount, maxCount
        template <typename T, std::size_t minCount, std::size_t maxCount>
        Arg<T,CharT,detail::CaseOfV<T,CharT,maxCount>>*
           addArgument(const String& shortOption,
@@ -50,19 +51,19 @@ class ArgumentParser
                                      bool required = false);
 
        bool parseArgs(int argc, CharT *argv[]);
+       bool parseArgs(int argc, const CharT *argv[]);
+
+       bool parseArgs(const Strings& args);
        bool parseCmdLine(const String& str);
-       bool parseCmdLine(const Strings& strs);
 
        String help()const;
-       const String& errorString()const{ return errorString_; }
-
-       bool hasError()const { return !errorString_.empty(); }
-
        String usage()const;
-
-       void setSubParserHelp(const String& help){ help_= help; };
-
        void reset();
+
+       const String& errorString()const{ return errorString_; }
+       bool hasError()const { return !errorString_.empty(); }
+       void setSubParserHelp(const String& help){ help_= help; };
+       bool exists() const { return exists_; }
 
    private:
        template <typename Iter>
@@ -79,18 +80,22 @@ class ArgumentParser
        bool checkCount(BaseArg<CharT>* arg,std::size_t count);
 
        String makeSubParsersParam()const;
+
    private:
        std::vector<BaseArg<CharT>*> positional_;
        std::vector<BaseArg<CharT>*> optional_;
        std::vector<ArgumentParser*> subParsers_;
+
        String errorString_;
        String name_;
        String help_;
-       String prefixChars_;
+       bool exists_ = false;
+       //String prefixChars_;
 };
 //------------------------------------------------------------------
 template<typename CharT>
-BaseArg<CharT> *ArgumentParser<CharT>::getOptional(std::basic_string_view<CharT> argOption)
+BaseArg<CharT>*
+   ArgumentParser<CharT>::getOptional(std::basic_string_view<CharT> argOption)
 {
   auto it = std::find_if(std::begin(optional_), std::end(optional_),
   [&](auto arg)
@@ -123,39 +128,34 @@ template<typename CharT>
 template<typename Iter>
 bool ArgumentParser<CharT>::pasrePositional(Iter first, Iter last)
 {
-  bool greedy = true;
   std::size_t totalCount= std::distance(first,last);
-  for(auto pa=std::begin(positional_);  pa!=std::end(positional_); ++pa)
+
+  for(auto argIt=std::begin(positional_);  argIt!=std::end(positional_); ++argIt)
   {
-     (*pa)->exists_= true; // always exists for positional args
+     (*argIt)->exists_= true;
 
-     std::size_t remainderCount= 0;
-     std::for_each(std::next(pa),std::end(positional_),
-                   [&remainderCount](auto a){ remainderCount += a->minCount_;});
+     const std::size_t shouldRemain=
+         std::accumulate(std::next(argIt), std::end(positional_), 0u,
+                    [](std::size_t sum,auto arg)
+                    {
+                      return sum + arg->minCount_;
+                    });
 
-     // +  if((*pa)->minCount_=1 && (*pa)->minCount_> (*pa)->maxCount_)
-     // ?
-     // *
+     const std::size_t available = (shouldRemain > totalCount)
+                              ? totalCount
+                              : totalCount-shouldRemain;
 
-     // the first posible arg must be greedy
-     std::size_t optimalCount = std::max((*pa)->minCount_,1u);
-     if(greedy && (*pa)->maxCount_>(*pa)->minCount_ && (*pa)->minCount_!=0)
+     const std::size_t count = std::min((*argIt)->maxCount_,available);
+     auto lastValue = std::next(first,count);
+     for( ; first!=lastValue; ++first)
      {
-       optimalCount = (*pa)->maxCount_;
-       greedy= false;
-     }
-
-     const std::size_t count= totalCount>remainderCount
-                              ? std::min( optimalCount, totalCount-remainderCount)
-                              : std::min( optimalCount, totalCount);
-
-     auto lastOfArg = std::next(first,count);
-     for(auto it=first; it!=lastOfArg; ++it)
-     {
-       if(!(*pa)->tryAssignOrAppend(*it, errorString_))
+       if(!(*argIt)->tryAssignOrAppend(*first, errorString_))
          return false;
      }
-     first= lastOfArg;
+
+     if(!checkCount(*argIt,count))
+       return false;
+
      totalCount -= count;
   }
   return true;
@@ -212,6 +212,8 @@ template<typename CharT>
 template<typename Iter>
 bool ArgumentParser<CharT>::parse(Iter first, Iter last)
 {
+  using namespace detail::literals;
+
   auto endItOfPositional = std::find_if(first,last,detail::isOption<String>);
   if(!pasrePositional(first,endItOfPositional))
     return false;
@@ -220,14 +222,12 @@ bool ArgumentParser<CharT>::parse(Iter first, Iter last)
   if(hasError())
     return false;
 
-  using namespace detail::literals;
-
   bool invalidChoice= false;
   if(it!=last)
   {
     if(subParsers_.empty())
     {
-       errorString_= "Error: unrecognized arguments: '"_lv+(*it)+"'"_lv;
+       errorString_= "Error: unrecognized arguments: '"_lv+String(*it)+"'"_lv;
        return false;
     }
     else
@@ -237,11 +237,15 @@ bool ArgumentParser<CharT>::parse(Iter first, Iter last)
                                 {
                                   return parser->name_== *it;
                                 });
-       invalidChoice = (parserIt==std::end(subParsers_));
-       if(!invalidChoice && !(*parserIt)->parse(std::next(it),last))
+       invalidChoice = (parserIt==std::end(subParsers_));             
+       if(!invalidChoice)
        {
+         (*parserIt)->exists_= true;
+         if(!(*parserIt)->parse(std::next(it),last))
+         {
           errorString_= (*parserIt)->errorString_;
           return false;
+         }
        }
     }
   }
@@ -266,19 +270,25 @@ bool ArgumentParser<CharT>::parse(Iter first, Iter last)
 template <typename CharT>
 bool ArgumentParser<CharT>::parseArgs(int argc, CharT *argv[])
 {
-   return parse(argv, argv+argc);
+  return parse(argv,argv+argc);
 }
 //------------------------------------------------------------------
 template<typename CharT>
-bool ArgumentParser<CharT>::parseCmdLine(const ArgumentParser::Strings &strs)
+bool ArgumentParser<CharT>::parseArgs(int argc, const CharT *argv[])
 {
-   return parse(std::begin(strs),std::end(strs));
+  return parse(argv,argv+argc);
+}
+//------------------------------------------------------------------
+template<typename CharT>
+bool ArgumentParser<CharT>::parseArgs(const ArgumentParser::Strings &args)
+{
+   return parse(std::begin(args),std::end(args));
 }
 //------------------------------------------------------------------
 template<typename CharT>
 bool ArgumentParser<CharT>::parseCmdLine(const ArgumentParser::String &str)
 {
-   return parseCmdLine(detail::split(str));
+   return parseArgs(detail::split(str));
 }
 //------------------------------------------------------------------
 template <typename CharT>
@@ -305,22 +315,22 @@ ArgumentParser<CharT>::~ArgumentParser()
 template<typename CharT>
 template<typename T,  std::size_t minCount, std::size_t maxCount>
 Arg<T, CharT,detail::CaseOfV<T,CharT,maxCount>>*
-  ArgumentParser<CharT>::addArgument(
-      const ArgumentParser<CharT>::String & shortOption,
+  ArgumentParser<CharT>::addArgument(const ArgumentParser<CharT>::String & shortOption,
       const ArgumentParser<CharT>::String & longOption,
       bool required)
 { 
-   auto argPrt =
+   auto arg =
        new Arg<T,CharT,detail::CaseOfV<T,CharT,maxCount>>(shortOption,longOption,required);
-   argPrt->minCount_= minCount;
-   argPrt->maxCount_= maxCount;
+
+   arg->minCount_= minCount;
+   arg->maxCount_= maxCount;
 
    if(!detail::isOption(shortOption) && !detail::isOption(longOption))
-      positional_.push_back(argPrt);
+      positional_.push_back(arg);
    else
-      optional_.push_back(argPrt);
+      optional_.push_back(arg);
 
-   return argPrt;
+   return arg;
 }
 //----------------------------------------------------------------------------
 template<typename CharT>
@@ -380,11 +390,8 @@ typename ArgumentParser<CharT>::String
 {
    using namespace detail::literals;
 
-   String helpStr;
-
-   helpStr += "\npositional arguments:\n"_lv;
+   String helpStr = "\npositional arguments:\n"_lv;
    for(auto arg: positional_)
-   //  if(!arg->help_.empty())
        helpStr+= "  "_lv+arg->makeHelpLine()+"\n"_lv;
 
    if(!subParsers_.empty())
@@ -398,7 +405,6 @@ typename ArgumentParser<CharT>::String
 
    helpStr += "\noptional arguments:\n"_lv;
    for(auto arg: optional_)
-   //  if(!arg->help_.empty())
        helpStr+= "  "_lv+arg->makeHelpLine()+"\n"_lv;
 
    return helpStr;
@@ -431,8 +437,7 @@ typename ArgumentParser<CharT>::String ArgumentParser<CharT>::usage() const
   if(!usageStr.empty())
     usageStr+= " "_lv;
 
-   usageStr+= this->makeSubParsersParam();
-
+   usageStr+= makeSubParsersParam();
    return usageStr;
 }
 //----------------------------------------------------------------------------

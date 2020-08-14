@@ -1,34 +1,30 @@
 #include <string>
 #include <iostream>
-
-#include <assert.h>
-
+//------------------------------------------------------------------
 #include "../ArgParse/ArgumentParser.h"
-
-using namespace argparse;
 //------------------------------------------------------------------
 template<typename T>
 void printArg(T* arg)
 {
   if(!arg->exists())
   {
-    std::cout << "Arg '"<< arg->options() << "' not exists!"<<std::endl;
+    std::cout << "Arg '"<< arg->makeOptions() << "' not exists!"<<std::endl;
     return;
   }
 
-  std::cout << "Arg '"<< arg->options() << "' : ";
+  std::cout << "Arg '"<< arg->makeOptions() << "' : ";
   if(arg->hasValue())
   {
-    if constexpr(arg->isContainer)
+     if constexpr(arg->isContainer)
+     {
+       std::cout<< "[";
+       for(auto value: arg->values())
+          std::cout << "'"<<value << "', ";
+       std::cout<< "] "<<std::endl;
+     }
+     else
     {
-     std::cout<< "[";
-     for(auto value: arg->values())
-       std::cout << "'"<<value << "', ";
-     std::cout<< "] "<<std::endl;
-    }
-    else
-    {
-     std::cout<<"'"<<arg->value()<<"'"<<std::endl;
+      std::cout<<"'"<<arg->value()<<"'"<<std::endl;
     }
   }
   else
@@ -37,121 +33,52 @@ void printArg(T* arg)
   }
 }
 //------------------------------------------------------------------
-void test1()
-{
-  ArgumentParser parser;
-  auto p1 = parser.addArgument<int,'+'>("p1");
-  auto p2 = parser.addArgument<int,'+'>("p2");
-  auto p3 = parser.addArgument<int,2,2>("p3");
-
-  const std::string cmdLine = R"(1 2 3 4 5 6)";
-  assert(parser.parseCmdLine(cmdLine));
-
-  assert( (p1->values()== std::vector<int>{ 1, 2, 3 }));
-  assert( (p2->values()== std::vector<int>{ 4 }));
-  assert( (p3->values()== std::vector<int>{ 5,6 }));
-}
-//------------------------------------------------------------------
-void test2()
-{
-  ArgumentParser parser;
-  auto p1 = parser.addArgument<int,'+'>("p1");
-
-  auto sub = parser.addSubParser("cmd");
-  auto c = sub->addArgument<int>("c");
-
-  const std::string cmdLine = R"(1 2 3 cmd 4)";
-  assert(!parser.parseCmdLine(cmdLine));
-  assert(parser.errorString()=="Error: argument 'p1': invalid int value: 'cmd'");
-}
-//------------------------------------------------------------------
-void test3()
-{
-  ArgumentParser parser;
-  auto p1 = parser.addArgument<int,3,3>("p1");
-  auto o1 = parser.addArgument<int>("-o1");
-
-  auto sub = parser.addSubParser("cmd1");
-  auto c = sub->addArgument<int>("c");
-
-  const std::string cmdLine = R"(1 2 3 -o1 4 cmd1 5)";
-
-  assert(parser.parseCmdLine(cmdLine));
-  assert((p1->values()== std::vector<int>{ 1, 2, 3 }));
-  assert(o1->value()== 4);
-  assert(c->value()== 5 );
-}
-//------------------------------------------------------------------
-void test4()
-{
-  ArgumentParser parser;
-  auto p1 = parser.addArgument<int,'+'>("p1","");
-  p1->setHelp("positional");
-
-  auto o1 = parser.addArgument<int,'+'>("-o","--opt");
-  o1->setHelp("optional");
-
-  auto sub1 = parser.addSubParser("cmd1");
-  sub1->setSubParserHelp("sub parser #1");
-  auto c1 = sub1->addArgument<int>("c1");
-
-  auto sub2 = parser.addSubParser("cmd2");
-  auto c2 = sub2->addArgument<int>("c2");
-  sub2->setSubParserHelp("sub parser #2");
-
-  std::cerr<< parser.usage() << std::endl;
-  std::cerr<< parser.help()  << std::endl;
-
-  return;
-
-//  const std::string cmdLine = R"(1 2 3 -o1 4 cmd3 5)";
-
-//  if(!parser.parseCmdLine(cmdLine))
-//     std::cerr<< parser.errorString()<< std::endl;
-
-
-
-////  assert((p1->values()== std::vector<int>{ 1, 2, 3 }));
-////  assert(o1->value()== 4);
-////  assert(c->value()== 5 );
-
-//  printArg(p1);
-//  printArg(o1);
-//  printArg(c1);
-//  printArg(c2);
-}
-//------------------------------------------------------------------
 int main(/*int argc, char *argv[]*/)
 {
   using namespace std::literals;
+  using namespace argparse;
 
-  test1();
-  test2();
-  test3();
-  test4();
+  ArgumentParser parser;
+  // auto prog = parser.addArgument<std::string,1,1>("prog");
+  auto p1 = parser.addArgument<bool,1,1>("p1");
+  auto p2 = parser.addArgument<int,2,2>("p2");
+  auto o = parser.addArgument<int,0,2>("-o","--optional");
 
-//  ArgumentParser parser;
-//  auto a1 = parser.addArgument<int,1,1>("a1");
-//  auto a2 = parser.addArgument<int,'+'>("a2");
-//  auto a3 = parser.addArgument<int,'+'>("-a2");
+  auto subParser1 = parser.addSubParser("cmd1");
+  auto p4 = subParser1->addArgument<int,'?'>("p3");
+  auto p5 = subParser1->addArgument<int,2,2>("p4");
 
-//  auto sub = parser.addSubParser("cmd");
+  auto subParser2 = parser.addSubParser("cmd2");
+  auto p6 = subParser2->addArgument<int,'?'>("a6");
+  auto p7 = subParser2->addArgument<int,2,2>("a7");
 
-//  auto a4 = sub->addArgument<int,'?'>("a3");
-//  auto a5 = sub->addArgument<int,2,2>("a4");
+  //if( !parser.parseArgs(argc,argv) )
+  if(!parser.parseCmdLine("true 2 3 4 5 -o cmd2 8 9 10"))
+  {
+    std::cerr<< parser.errorString() << std::endl;
 
-//  std::string cmdLine = R"(1 2 3 -a2 3 4 cmd 5 6)";
-//  std::cout << cmdLine << std::endl;
+    std::cout<<"usage: "<< parser.usage() << std::endl;
+    std::cout<< parser.help() << std::endl;
+    return 1;
+  }
 
-//  if(!parser.parseCmdLine(cmdLine))
-//    std::cerr<< parser.errorString()<< std::endl;
+  printArg(p1);
+  printArg(p2);
 
-//   printArg(a1);
-//   printArg(a2);
-//   printArg(a3);
+  if(o->exists() && o->hasValue())
+    printArg(o);
 
-//   printArg(a4);
-//   printArg(a5);
+  if(subParser1->exists())
+  {
+    printArg(p4);
+    printArg(p5);
+  }
+
+  if(subParser2->exists())
+  {
+    printArg(p6);
+    printArg(p7);
+  }
 
   return 0;
 }

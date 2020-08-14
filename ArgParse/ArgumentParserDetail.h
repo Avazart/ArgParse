@@ -259,7 +259,6 @@ struct CaseOfCharNArg
 
 template<typename T,typename CharT,char nargs>
 inline constexpr Case CaseOfCharNArgV= CaseOfCharNArg<T,CharT,nargs>::value;
-
 //---------------------------------------------------------------------------
 template<typename CharT>
 std::vector<std::basic_string<CharT>>

@@ -34,12 +34,15 @@ class BaseArg
       virtual ~BaseArg()=default;
 
       void setHelp(const String& help){ help_= help; }
-      virtual bool hasValue()const=0;
-
       virtual bool exists()const { return exists_; } ;
-      virtual const char* typeName()const= 0;
 
+      virtual bool hasValue()const=0;
+      virtual const char* typeName()const= 0;
       virtual void reset()=0;
+
+      String makeOptions()const;
+      String makeParam()const;
+      String makeHelpLine()const;
 
   protected:
       friend ArgumentParser<CharT>;
@@ -55,10 +58,6 @@ class BaseArg
       std::size_t maxCount_= std::numeric_limits<std::size_t>::max();
 
       virtual bool tryAssignOrAppend(const String& str, String& error)=0;
-
-      String makeOptions()const;
-      String makeParam()const;
-      String makeHelpLine()const;
 };
 //---------------------------------------------------------------------------------------
 template<typename CharT>
