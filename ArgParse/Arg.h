@@ -8,10 +8,12 @@
 #include <algorithm>
 #include <optional>
 #include <type_traits>
+#include <iomanip>
 //----------------------------------------------------------------------------
-#include "ArgumentParserDetail.h"
+#include "StringUtils.h"
+#include "TypeUtils.h"
 //----------------------------------------------------------------------------
-namespace argparse
+namespace ArgParse
 {
 //----------------------------------------------------------------------------
 template<typename CharT=char> class ArgumentParser;
@@ -33,16 +35,24 @@ class BaseArg
 
       virtual ~BaseArg()=default;
 
+      const String& shortOption()const { return shortOption_;  }
+      const String& longOption() const { return longOption_;  }
+
+      std::size_t maxCount()const{ return maxCount_; }
+      std::size_t minCount()const{ return minCount_; }
+
+      const String& help()const { return help_;  }
       void setHelp(const String& help){ help_= help; }
+
+      //
       virtual bool exists()const { return exists_; } ;
 
-      virtual bool hasValue()const=0;
-      virtual const char* typeName()const= 0;
-      virtual void reset()=0;
+      virtual bool hasValue()const= 0;
+      virtual void reset()= 0;
 
-      String makeOptions()const;
-      String makeParam()const;
-      String makeHelpLine()const;
+      virtual std::size_t typeId()const= 0;
+      virtual const char* typeName()const= 0;
+      virtual bool isSequence()const=0;
 
   protected:
       friend ArgumentParser<CharT>;
@@ -57,81 +67,36 @@ class BaseArg
       std::size_t minCount_= 0;
       std::size_t maxCount_= std::numeric_limits<std::size_t>::max();
 
-      virtual bool tryAssignOrAppend(const String& str, String& error)=0;
+      virtual bool tryAssignOrAppend(const String& str,
+                                     const String& prefixChars,
+                                     String& error)=0;
 };
 //---------------------------------------------------------------------------------------
 template<typename CharT>
-typename BaseArg<CharT>::String BaseArg<CharT>::makeOptions()const
-{
-  using namespace detail::literals;
+auto makeOptions(BaseArg<CharT>* arg);
 
-  if(shortOption_.empty())
-    return longOption_;
-
-  if(longOption_.empty())
-    return shortOption_;
-
-  return  shortOption_+"/"_lv+longOption_;
-}
-//---------------------------------------------------------------------------------------
 template<typename CharT>
-typename BaseArg<CharT>::String BaseArg<CharT>::makeParam()const
-{
-  using namespace detail::literals;
-  String name_ = longOption_.empty()
-                 ?shortOption_
-                 :longOption_;
+auto makeOptions(BaseArg<CharT>* arg);
 
-  auto it = std::find_if_not(std::begin(name_),
-                             std::next(std::begin(name_),
-                                       std::min(2u,name_.size())),
-                             detail::isOptionPrefix<CharT>);
-  name_.erase(std::begin(name_),it);
-  if(maxCount_>1)
-     name_ += " ["_lv+name_+" ...]"_lv;
-  return  name_;
-}
-//---------------------------------------------------------------------------------------
 template<typename CharT>
-typename BaseArg<CharT>::String BaseArg<CharT>::makeHelpLine()const
-{
-  using namespace detail::literals;
-
-  String helpLine;
-  if(!shortOption_.empty())
-    helpLine += shortOption_+" "_lv+makeParam();
-
-
-  if(!longOption_.empty())
-  {
-    if(!helpLine.empty())
-       helpLine +=", "_lv;
-    helpLine += longOption_ +" "_lv+makeParam();
-  }
-
-  if(!help_.empty())
-    helpLine += " "_lv+ help_;
-
-  return helpLine;
-}
+auto makeHelpLine(BaseArg<CharT>* arg,
+                  const std::basic_string<CharT>& prefixChars);
 //---------------------------------------------------------------------------------------
-
-//---------------------------------------------------------------------------------------
-template< typename T, typename CharT,detail::Case case_>
+template< typename T, typename CharT, TypeUtils::Case case_>
 class ArgImpl
     : public BaseArg<CharT>
 {
-  public:
-     static constexpr bool isContainer=
-        case_==detail::Case::numbers || case_==detail::Case::strings;
+     static constexpr const bool isSequence_=
+         case_==TypeUtils::Case::numbers ||
+         case_==TypeUtils::Case::strings;
 
+  public:
      using String = std::basic_string<CharT>;
      using RangeValueType = std::conditional_t<
-                            detail::IsBasicStringV<T,CharT>,
-                            detail::RangeTypeT<T,CharT>,
+                            TypeUtils::IsBasicStringV<T,CharT>,
+                            TypeUtils::RangeTypeT<T,CharT>,
                             T>;
-
-     using StorageType = std::conditional_t<isContainer,
+     using StorageType = std::conditional_t<isSequence_,
                                             std::vector<T>,
                                             std::optional<T>>;
 
@@ -143,7 +108,7 @@ class ArgImpl
 
      virtual bool hasValue()const override
      {
-       if constexpr(isContainer)
+       if constexpr(isSequence_)
           return !storage_.empty();
        else
           return storage_.has_value();
@@ -151,18 +116,30 @@ class ArgImpl
 
      virtual void reset()override
      {
-       if constexpr(isContainer)
+       if constexpr(isSequence_)
           storage_.clear();
        else
           storage_.reset();
      }
 
-     virtual const char* typeName()const override
+     virtual std::size_t typeId() const override
      {
-       return typeid (T).name();
+       return TypeUtils::TypeInfo<T>::id;
      }
 
-     virtual bool tryAssignOrAppend(const String& str, String& error) override;
+     virtual const char* typeName()const override
+     {
+       return TypeUtils::TypeInfo<T>::name;
+     }
+
+     virtual bool isSequence()const override
+     {
+       return isSequence_;
+     }
+
+     virtual bool tryAssignOrAppend(const String& str,
+                                    const String& prefixChars,
+                                    String& error) override;
 
    protected:
        std::pair<RangeValueType,RangeValueType> range_ =
@@ -172,30 +149,31 @@ class ArgImpl
        StorageType storage_;
 };
 //---------------------------------------------------------------------------------------
-template< typename T, typename CharT,detail::Case case_>
+template< typename T, typename CharT, TypeUtils::Case case_>
 bool ArgImpl<T,CharT,case_>::tryAssignOrAppend(
       const ArgImpl<T,CharT,case_>::String& str,
+      const ArgImpl<T,CharT,case_>::String& prefixChars,
       ArgImpl<T,CharT,case_>::String& error)
 {
-  using namespace detail::literals;
+  using namespace StringUtils::literals;
   try
   {
-    const T value = detail::convert<T>(str);
-
-    if constexpr(case_==detail::Case::string || case_==detail::Case::strings)
+    const T value = TypeUtils::TypeInfo<T>::assignFromString(str);
+    if constexpr(case_==TypeUtils::Case::string ||
+                 case_==TypeUtils::Case::strings)
     {
-      if(value.length()< range_.first || value.length()> range_.second)
-        throw std::out_of_range("");
-        // std::length_error()
+      if(value.length()< range_.first ||
+         value.length()> range_.second)
+        throw std::out_of_range("out of range");
     }
     else
     {
       if(value< range_.first || value> range_.second)
-        throw std::out_of_range("");
-        // std::range_error()
+        throw std::out_of_range("out of range");
     }
 
-    if constexpr(case_==detail::Case::numbers ||  case_==detail::Case::strings)
+    if constexpr(case_==TypeUtils::Case::numbers ||
+                 case_==TypeUtils::Case::strings)
         storage_.push_back(value);
     else
         storage_ = value;
@@ -203,25 +181,29 @@ bool ArgImpl<T,CharT,case_>::tryAssignOrAppend(
   }
   catch (const std::out_of_range&)
   {
-    error = "Error: argument '"_lv + this->makeParam()+"' value: '"_lv+str+"' "_lv;
+    error= "Error: argument '"_lv +
+           makeUsage(this,prefixChars)+ // !!!
+           "' value: '"_lv+str+"' "_lv;
 
-    if constexpr(case_==detail::Case::string ||
-                 case_==detail::Case::strings)
+    if constexpr(case_==TypeUtils::Case::string ||
+                 case_==TypeUtils::Case::strings)
        error += "string length "_lv;
 
     error+= "out of range ["_lv+
-               detail::toStringT<CharT>(std::to_string(this->range_.first))+
-               ".."_lv+
-               detail::toStringT<CharT>(std::to_string(this->range_.second))+
-               "]"_lv;
+            StringUtils::toString<CharT>(this->range_.first)+
+            ".."_lv+
+            StringUtils::toString<CharT>(this->range_.second)+
+            "]"_lv;
 
     return false;
   }
   catch (const std::invalid_argument& )
   {
-    error= "Error: argument '"_lv + this->makeOptions()+
-            "': invalid "_lv       + detail::toStringT<CharT>(typeName())+
-            " value: '"_lv + str+"'"_lv;;
+    error=  "Error: argument '"_lv+
+            makeOptions(this)+
+            "': invalid "_lv      +
+            StringUtils::LatinView(typeName())+
+            " value: '"_lv+str+"'"_lv;
     return false;
   }
   return true;
@@ -229,18 +211,19 @@ bool ArgImpl<T,CharT,case_>::tryAssignOrAppend(
 //---------------------------------------------------------------------------------------
 // Arg
 //---------------------------------------------------------------------------------------
-template< typename T, typename CharT, detail::Case case_>
+template< typename T, typename CharT, TypeUtils::Case case_>
 class Arg: public ArgImpl<T,CharT,case_>
 {
+
 };
 //---------------------------------------------------------------------------------------
 template< typename T, typename CharT>
-class Arg<T,CharT,detail::Case::numbers>
-    :public ArgImpl<T,CharT,detail::Case::numbers>
+class Arg<T,CharT,TypeUtils::Case::numbers>
+    :public ArgImpl<T,CharT,TypeUtils::Case::numbers>
 {
   public:
      using String = std::basic_string<CharT>;
-     using Base = ArgImpl<T,CharT,detail::Case::numbers>;
+     using Base = ArgImpl<T,CharT,TypeUtils::Case::numbers>;
      using RangeValueType = typename Base::RangeValueType;
 
      Arg(const String& shortKey,
@@ -257,17 +240,17 @@ class Arg<T,CharT,detail::Case::numbers>
      void setRange(RangeValueType minValue,RangeValueType maxValue)
      {
        this->range_ = std::make_pair(minValue,maxValue);
-     }
+     }   
 };
 //---------------------------------------------------------------------------------------
 template< typename T, typename CharT>
-class Arg<T,CharT,detail::Case::strings>
-    :public ArgImpl<T,CharT,detail::Case::strings>
+class Arg<T,CharT,TypeUtils::Case::strings>
+    :public ArgImpl<T,CharT,TypeUtils::Case::strings>
 {
   public:
-    using String = std::basic_string<CharT>;
-    using Base = ArgImpl<T,CharT,detail::Case::strings>;
-    using RangeValueType = typename Base::RangeValueType;
+     using String = std::basic_string<CharT>;
+     using Base = ArgImpl<T,CharT,TypeUtils::Case::strings>;
+     using RangeValueType = typename Base::RangeValueType;
 
      Arg(const String& shortKey,
          const String& longKey,
@@ -285,12 +268,12 @@ class Arg<T,CharT,detail::Case::strings>
 };
 //---------------------------------------------------------------------------------------
 template< typename T, typename CharT>
-class Arg<T,CharT,detail::Case::number>:
-     public ArgImpl<T,CharT,detail::Case::number>
+class Arg<T,CharT,TypeUtils::Case::number>:
+     public ArgImpl<T,CharT,TypeUtils::Case::number>
 {
   public:
      using String = std::basic_string<CharT>;
-     using Base = ArgImpl<T,CharT,detail::Case::number>;
+     using Base = ArgImpl<T,CharT,TypeUtils::Case::number>;
      using RangeValueType = typename Base::RangeValueType;
 
      Arg(const String& shortKey,
@@ -311,12 +294,12 @@ class Arg<T,CharT,detail::Case::number>:
 };
 //---------------------------------------------------------------------------------------
 template< typename T, typename CharT>
-class Arg<T,CharT,detail::Case::string>:
-     public ArgImpl<T,CharT,detail::Case::string>
+class Arg<T,CharT,TypeUtils::Case::string>:
+     public ArgImpl<T,CharT,TypeUtils::Case::string>
 {
   public:
      using String = std::basic_string<CharT>;
-     using Base = ArgImpl<T,CharT,detail::Case::string>;
+     using Base = ArgImpl<T,CharT,TypeUtils::Case::string>;
      using RangeValueType = typename Base::RangeValueType;
 
      Arg(const String& shortKey,
@@ -333,6 +316,71 @@ class Arg<T,CharT,detail::Case::string>:
      void setMinLength(RangeValueType minLength){ this->range_.first = minLength; }
      void setMaxLength(RangeValueType maxLength){ this->range_.second= maxLength; }
 };
+//----------------------------------------------------------------------------
+//
+//----------------------------------------------------------------------------
+template<typename CharT>
+auto makeOptions(BaseArg<CharT>* arg)
+{
+  using namespace StringUtils::literals;
+
+  if(arg->shortOption().empty())
+    return arg->longOption();
+
+  if(arg->longOption().empty())
+    return arg->shortOption();
+
+  return arg->shortOption()+"/"_lv+arg->longOption();
+}
+//---------------------------------------------------------------------------------------
+template<typename CharT>
+auto makeUsage(BaseArg<CharT>* arg,
+           const std::basic_string<CharT>& prefixChars)
+{
+  using String = std::basic_string<CharT>;
+  using namespace StringUtils::literals;
+
+  String name_ = arg->longOption().empty()
+                 ? arg->shortOption()
+                 : arg->longOption();
+
+  auto it = std::find_if_not(std::begin(name_),
+                             std::next(std::begin(name_),
+                                       std::min(2u,name_.size())),
+                             [&prefixChars](CharT c)
+                             {
+                               return prefixChars.find(c)!= String::npos;
+                             });
+
+  name_.erase(std::begin(name_),it);
+  if(arg->maxCount()>1)
+     name_ += " ["_lv+name_+" ...]"_lv;
+  return  name_;
+}
+//---------------------------------------------------------------------------------------
+template<typename CharT>
+auto makeHelpLine(BaseArg<CharT>* arg,
+                  const std::basic_string<CharT>& prefixChars)
+{
+  using namespace StringUtils::literals;
+  using String = std::basic_string<CharT>;
+
+  String helpLine;
+  if(!arg->shortOption().empty())
+    helpLine += arg->shortOption()+" "_lv+makeUsage(prefixChars);
+
+  if(!arg->longOption().empty())
+  {
+    if(!helpLine.empty())
+       helpLine +=", "_lv;
+    helpLine += arg->longOption()+" "_lv+makeUsage(prefixChars);
+  }
+
+  if(!arg->help().empty())
+    helpLine += " "_lv+ arg->help();
+
+  return helpLine;
+}
 //-------------------------------------------------------------------
 }
 //-------------------------------------------------------------------

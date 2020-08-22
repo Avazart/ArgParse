@@ -12,6 +12,7 @@ INCLUDEPATH+= ../ArgParse/
 HEADERS += \
   ../ArgParse/Arg.h \
   ../ArgParse/ArgumentParser.h \
-  ../ArgParse/ArgumentParserDetail.h
-
-
+  ../ArgParse/ArgumentParserDetail.h \
+  ../ArgParse/StringUtils.h \
+  ../ArgParse/TypeUtils.h \
+  ../ArgParse/LatinView.h

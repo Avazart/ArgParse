@@ -3,7 +3,7 @@
 
 #include "../../ArgParse/ArgumentParser.h"
 
-using namespace argparse;
+using namespace ArgParse;
 using namespace std::literals;
 
 TEST(split_cmd_line, test_quote)
@@ -30,8 +30,8 @@ TEST(common,parseArgs)
   const int argc = 3;
 
   ArgumentParser parser;
-  auto p1 = parser.addArgument<int,0,1>("p1");
-  auto p2 = parser.addArgument<int,'+'>("p2");
+  parser.addArgument<int,0,1>("p1");
+  parser.addArgument<int,NArgs::oneOrMore>("p2");
 
   ASSERT_TRUE(parser.parseArgs(argc,argv) )
       << parser.errorString();
