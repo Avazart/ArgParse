@@ -16,101 +16,155 @@ namespace StringUtils
 //----------------------------------------------------------------------------
 namespace detail
 {
-  template<typename CharT, typename T>
-  auto makeStrTo( T(*f)(const CharT *, CharT **, int) )
+  template<typename F, typename WF, typename T, typename D=T>
+  class Converter
   {
-    auto func = [f](const std::basic_string<CharT>& str)
-    {
-      CharT* last = nullptr;
-      const CharT* end = str.c_str()+str.length();
-      const T value= f(str.c_str(), &last, 10);
-      if(last != end)
-        throw std::invalid_argument("invalid argument");
-      return value;
-    };
-    return func;
+      using FT1 =  T(const char *, char **, int);  // std::strtol,
+      using FT2 =  T(const char *, char **);       // std::strtof,
+
+      using WFT1 = T(const wchar_t *, wchar_t **, int); // std::wcstol
+      using WFT2 = T(const wchar_t *, wchar_t **);      // std::wcstof
+
+      static_assert(std::is_same_v<F,FT1>   ||  std::is_same_v<F,FT2>);
+      static_assert(std::is_same_v<WF,WFT1> ||  std::is_same_v<WF,WFT2>);
+
+    public:
+       Converter(F* f,WF* wf)
+         :f_(f),wf_(wf)
+       {}
+
+       template<typename CharT>
+       D operator()(const std::basic_string<CharT>& s)const
+       {
+         CharT* last = nullptr;
+         const CharT* end = s.c_str()+s.length();
+
+         T value;
+         if constexpr(std::is_same_v<CharT,char>)
+         {
+           if constexpr(std::is_same_v<F,FT1>)
+             value= f_(s.c_str(), &last, 10); // FT1
+           else
+             value= f_(s.c_str(), &last);     // FT2
+         }
+         else
+         {
+           if constexpr(std::is_same_v<WF,WFT1>)
+             value= wf_(s.c_str(), &last, 10); // WFT1
+           else
+             value= wf_(s.c_str(), &last);     // WFT2
+         }
+
+         if(last!=end)
+           throw std::invalid_argument("invalid argument");
+
+         if constexpr(std::is_same_v<T,D>)
+         {
+            return value;
+         }
+         else
+         {
+           if(value < std::numeric_limits<D>::lowest() &&
+              value > std::numeric_limits<D>::max())
+             throw std::out_of_range("out of range");
+
+           return static_cast<D>(value);
+         }
+       }
+
+   private:
+      F*  f_ = nullptr;
+      WF* wf_= nullptr;
+  };
+
+  template<typename T, typename D=T,typename F, typename WF>
+  auto makeConverter(F* f, WF* wf)
+  {
+    return Converter<F,WF,T,D>(f,wf);
   }
-
-  template<typename CharT, typename T>
-  auto makeStrTo( T(*f)(const CharT *, CharT **) )
-  {
-    auto func = [f](const std::basic_string<CharT>& str)
-    {
-      CharT* last = nullptr;
-      const CharT* end = str.c_str()+str.length();
-      const T value= f(str.c_str(), &last);
-      if(last != end)
-        throw std::invalid_argument("invalid argument");
-      return value;
-    };
-    return func;
-  }
-
-  template<typename Dest,typename CharT,typename T>
-  auto makeStrTo2(T(*f)(const CharT *, CharT **, int))
-  {
-    auto func = [f](const std::basic_string<CharT>& str)
-    {
-      CharT* last = nullptr;
-      const CharT* end = str.c_str()+str.length();
-      const T value= f(str.c_str(), &last, 10);
-      if(last != end)
-        throw std::invalid_argument("invalid argument");
-
-      if(value < std::numeric_limits<Dest>::lowest() &&
-         value > std::numeric_limits<Dest>::max())
-        throw std::out_of_range("out of range");
-
-      return static_cast<Dest>(value);
-    };
-  return func;
- }
 }
 //----------------------------------------------------------------------------
-template <typename S>
-inline bool strToBool(const S& str)
+template<typename CharT>
+bool strToBool(const std::basic_string<CharT>& s)
 {
   using namespace literals;
-  if(str=="true"_lv  || str=="1"_lv)
+  if(s=="true"_lv  || s=="1"_lv)
     return true;
-  else if(str=="false"_lv || str=="0"_lv)
+  else if(s=="false"_lv || s=="0"_lv)
     return false;
 
   throw std::invalid_argument("Can not convert string to bool");
 }
 
-template<typename S>
-inline auto strToInt(S str){ return detail::makeStrTo2<int>(std::strtol)(str);};
-
-template<typename S>
-inline auto strToUInt(S str){ return detail::makeStrTo2<unsigned int>(std::strtoul)(str);};
-
-template<typename S>
-inline auto strToLong(S str){ return detail::makeStrTo(std::strtol)(str); };
-
-template<typename S>
-inline auto strToULong(S str){ return detail::makeStrTo(std::strtoul)(str);};
-
-template<typename S>
-inline auto strToLongLong(S str) { return detail::makeStrTo(std::strtoll)(str); };
-
-template<typename S>
-inline auto strToULongLong(S str){ return detail::makeStrTo(std::strtoull)(str); };
-
-template<typename S>
-auto strToFloat(S str){ return detail::makeStrTo(std::strtof)(str); };
-
 template<typename CharT>
-inline auto strToDouble(std::basic_string<CharT> str)
+auto strToInt(const std::basic_string<CharT>& s)
 {
-  if constexpr(std::is_same_v<CharT,char>)
-     return detail::makeStrTo(std::strtod)(str);
-  else
-     return detail::makeStrTo(std::wcstod)(str);
+  return detail::makeConverter<long,int>(std::strtol,std::wcstol)(s);
 };
 
-template<typename S>
-inline auto strToLongDouble(S str){ return detail::makeStrTo(std::strtold)(str); };
+template<typename CharT>
+auto strToUInt(const std::basic_string<CharT>& s)
+{
+  return
+     detail::makeConverter<unsigned long,
+                           unsigned int>(std::strtoul,
+                                         std::wcstoul)(s);
+};
+
+template<typename CharT>
+auto strToLong(const std::basic_string<CharT>& s)
+{
+  return
+     detail::makeConverter<long>(std::strtol,
+                                 std::wcstol)(s);
+};
+
+template<typename CharT>
+auto strToULong(const std::basic_string<CharT>& s)
+{
+  return
+   detail::makeConverter<unsigned long>(std::strtoul,
+                                        std::wcstoul)(s);
+};
+
+template<typename CharT>
+auto strToLongLong(const std::basic_string<CharT>& s)
+{
+  return detail::makeConverter<long long>(std::strtoll,
+                                          std::wcstoll)(s);
+};
+
+template<typename CharT>
+auto strToULongLong(const std::basic_string<CharT>& s)
+{
+  return
+    detail::makeConverter<unsigned long long>(std::strtoull,
+                                              std::wcstoull)(s);
+};
+
+template<typename CharT>
+auto strToFloat(const std::basic_string<CharT>& s)
+{
+  return
+    detail::makeConverter<float>(std::strtof,
+                                 std::wcstof)(s);
+};
+
+template<typename CharT>
+auto strToDouble(std::basic_string<CharT> s)
+{
+  return
+    detail::makeConverter<double>(std::strtod,
+                                  std::wcstod)(s);
+};
+
+template<typename CharT>
+auto strToLongDouble(const std::basic_string<CharT>& s)
+{
+  return
+     detail::makeConverter<long double>(std::strtold,
+                                        std::wcstold)(s);
+};
 //----------------------------------------------------------------------------
 template <typename CharT,typename Number>
 inline std::basic_string<CharT> toString(Number number)

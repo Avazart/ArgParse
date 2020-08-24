@@ -330,6 +330,8 @@ Arg<T, TypeUtils::groupOfNArgs<T,nargs,CharT>(),CharT>
    constexpr const std::size_t maxCount=
       std::numeric_limits<std::size_t>::max();
 
+   (void)maxCount;
+
    if constexpr(nargs==NArgs::optional)
      return addArgument<T,0,1>(shortOption,longOption,required);
    else if constexpr(nargs==NArgs::zeroOrMore)
@@ -340,11 +342,11 @@ Arg<T, TypeUtils::groupOfNArgs<T,nargs,CharT>(),CharT>
 //----------------------------------------------------------------------------
 template<typename CharT>
 template <typename T,char nargs>
-Arg<T, TypeUtils::groupOfNArgs<T,nargs>(),CharT>
-    ArgumentParser<CharT>::addArgument(
-                              const ArgumentParser<CharT>::String& shortOption,
-                              const ArgumentParser<CharT>::String& longOption,
-                              bool required)
+Arg<T, TypeUtils::groupOfNArgs<T,nargs,CharT>(), CharT>
+ArgumentParser<CharT>::
+    addArgument(const ArgumentParser<CharT>::String& shortOption,
+                const ArgumentParser<CharT>::String& longOption,
+                bool required)
 {
    constexpr const std::size_t maxCount=
      std::numeric_limits<std::size_t>::max();

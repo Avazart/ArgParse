@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 #include <iostream>
+#include <vector>
+#include <string>
 
 #include "../../ArgParse/ArgumentParser.h"
 
@@ -73,10 +75,9 @@ TEST(common,wchar)
   ArgumentParser<wchar_t> parser;
 
   ArgT<double,'?',wchar_t> p0 = parser.addArgument<double>(L"p0");
-
   IntArg<'?',wchar_t> p1 = parser.addArgument<int>(L"p1");
 
-  auto p2 = parser.addArgument<std::wstring,3,5>(L"p2");
+  auto p2 = parser.addArgument<std::wstring,2,3>(L"p2");
 
   StringArg<'?',wchar_t>
       p3 = parser.addArgument<std::wstring,NArgs::optional>(L"p3");
@@ -86,6 +87,19 @@ TEST(common,wchar)
 
   StringArg<'+',wchar_t>
       p5 = parser.addArgument<std::wstring,NArgs::oneOrMore>(L"p5");
+
+  ASSERT_TRUE(parser.parseCmdLine(LR"(1.5 2 "31 32 33" 4 "5"6" 7" 8 9)"s))
+      << parser.errorString();
+
+  ASSERT_TRUE(p0);
+  ASSERT_DOUBLE_EQ(*p0, 1.5);
+
+  ASSERT_TRUE(p1);
+  ASSERT_DOUBLE_EQ(*p1, 2);
+
+  ASSERT_EQ(*p2,(std::vector<std::wstring>{L"31 32 33"s,L"4"s,L"56 7"s}));
+
+  ASSERT_EQ(*p3,L"8"s);
 }
 
 TEST(positional,types)
@@ -246,7 +260,7 @@ TEST(positional_one_or_more, n5v2) //  "+++"
   ArgumentParser parser;
   auto p1 = parser.addArgument<int,'+'>("p1");
   auto p2 = parser.addArgument<int,'+'>("p2");
-  auto p3 = parser.addArgument<int,2,2>("p3");
+  auto p3 = parser.addArgument<int,2,3>("p3");
   // 5
   ASSERT_TRUE(parser.parseCmdLine("1 2 3 4 5")) << parser.errorString();
   ASSERT_EQ(*p1,(std::vector<int>{1,2}));

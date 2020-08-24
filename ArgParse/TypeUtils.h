@@ -41,10 +41,10 @@ struct TypeCounter<0>
     template <>  \
     struct TypeInfo<TYPE> \
     {\
-       template <typename StringT> \
-       static TYPE assignFromString(StringT &&s) \
+       template <typename CharT> \
+       static TYPE assignFromString(const std::basic_string<CharT>& s) \
        { \
-         return (ASSIGN_FROM_STRING)(std::forward<StringT>(s)); \
+         return (ASSIGN_FROM_STRING)(s); \
        } \
        static constexpr const char * name = TYPE_NAME; \
        static constexpr const bool isRegistred = true; \

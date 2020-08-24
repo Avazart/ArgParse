@@ -13,6 +13,7 @@ void printArg(const T& arg)
 //  }
 
 //  std::cout << "Arg '"<< arg->makeOptions() << "' : ";
+
   if(arg)
   {
      if constexpr(arg.typeGroup()==ArgParse::TypeGroup::numbers ||
