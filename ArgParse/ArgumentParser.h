@@ -14,96 +14,91 @@ namespace ArgParse
 {
 //----------------------------------------------------------------------------
 using NArgs = TypeUtils::NArgs;
-
-template <typename T>
-using TypeInfo = TypeUtils::TypeInfo<T>;
-
 using StringUtils::split;
 //----------------------------------------------------------------------------
 template <typename CharT>
 class ArgumentParser
 {
-   public:
-       using String  = std::basic_string<CharT>;
-       using Strings = std::vector<String>;
+public:
+  using String  = std::basic_string<CharT>;
+  using Strings = std::vector<String>;
+  using BaseArgPtr= std::shared_ptr<BaseArgImpl<CharT>>;
+  using ArgumentParserPtr= std::shared_ptr<ArgumentParser<CharT>>;
 
-       explicit ArgumentParser(const String& prefixChars=
-                               StringUtils::LatinView("-/"))
-        :prefixChars_(prefixChars)
-       {}
+  explicit ArgumentParser(const String& prefixChars=
+      StringUtils::LatinView("-/"))
+    :prefixChars_(prefixChars)
+  {}
 
-       virtual ~ArgumentParser();
+  virtual ~ArgumentParser()=default;
 
-       ArgumentParser* addSubParser(const String& name);
+  ArgumentParserPtr addSubParser(const String& name);
 
-       // minCount, maxCount
-       template <typename T, std::size_t minCount, std::size_t maxCount>
-       Arg<T,CharT,TypeUtils::caseOfMaxCount<T,CharT,maxCount>()>*
-          addArgument(const String& shortOption,
-                      const String& longOption=String(),
-                      bool required= false);
+  // minCount, maxCount
+  template <typename T, std::size_t minCount, std::size_t maxCount>
+  Arg<T, TypeUtils::groupOfMaxCount<T,maxCount,CharT>(), CharT>
+  addArgument(const String& shortOption,
+              const String& longOption=String(),
+              bool required= false);
 
-       // nargs
-       template <typename T, NArgs nargs= NArgs::optional>
-       Arg<T,CharT,TypeUtils::caseOfNArgs<T,CharT,nargs>()>*
-                         addArgument(const String& shortKey,
-                                     const String& longKey=String(),
-                                     bool required = false);
+  // nargs
+  template <typename T, NArgs nargs= NArgs::optional>
+  Arg<T, TypeUtils::groupOfNArgs<T,nargs,CharT>(), CharT>
+  addArgument(const String& shortKey,
+              const String& longKey=String(),
+              bool required = false);
 
-       // char nargs
-        template <typename T,char nargs>
-        Arg<T,CharT,TypeUtils::caseOfNArgs<T,CharT,nargs>()>*
-                          addArgument(const String& shortOption,
-                                      const String& longOption=String(),
-                                      bool required= false);
+  // char nargs
+  template <typename T,char nargs>
+  Arg<T, TypeUtils::groupOfNArgs<T,nargs,CharT>(), CharT>
+  addArgument(const String& shortOption,
+              const String& longOption=String(),
+              bool required= false);
 
-       bool parseArgs(int argc, CharT *argv[]);
-       bool parseArgs(int argc, const CharT *argv[]);
+  bool parseArgs(int argc, CharT *argv[]);
+  bool parseArgs(int argc, const CharT *argv[]);
 
-       bool parseArgs(const Strings& args);
-       bool parseCmdLine(const String& str);
+  bool parseArgs(const Strings& args);
+  bool parseCmdLine(const String& str);
 
-       String help()const;
-       String usage()const;
-       void reset();
+  String help()const;
+  String usage()const;
+  void reset();
 
-       const String& errorString()const{ return errorString_; }
-       bool hasError()const { return !errorString_.empty(); }
-       void setSubParserHelp(const String& help){ help_= help; };
-       bool exists() const { return exists_; }
+  const String& errorString()const{ return errorString_; }
+  bool hasError()const { return !errorString_.empty(); }
+  void setSubParserHelp(const String& help){ help_= help; };
+  bool exists() const { return exists_; }
 
-   private:
-       template <typename Iter>
-       bool parse(Iter first,Iter last);
+private:
+  template <typename Iter>
+  bool parse(Iter first,Iter last);
 
-       template <typename Iter>
-       bool pasrePositional(Iter first,Iter last);
+  template <typename Iter>
+  bool pasrePositional(Iter first,Iter last);
 
-       template <typename Iter>
-       Iter parseOptional(Iter first,Iter last);
+  template <typename Iter>
+  Iter parseOptional(Iter first,Iter last);
 
-       BaseArg<CharT>* getOptional(std::basic_string_view<CharT> argOption);
+  std::shared_ptr<BaseArgImpl<CharT>>
+  getOptional(std::basic_string_view<CharT> argOption);
 
-       bool checkCount(BaseArg<CharT>* arg,std::size_t count);
+  String subParsersUsage()const;
 
-       String subParsersUsage()const;
+private:
+  std::vector<BaseArgPtr> positional_;
+  std::vector<BaseArgPtr> optional_;
+  std::vector<ArgumentParserPtr> subParsers_;
 
-   private:
-       // using BaseArgPtr= std::shared_ptr<BaseArg<CharT>>;
-
-       std::vector<BaseArg<CharT>*> positional_;
-       std::vector<BaseArg<CharT>*> optional_;
-       std::vector<ArgumentParser*> subParsers_;
-
-       String errorString_;
-       String name_;
-       String help_;
-       bool exists_ = false;
-       String prefixChars_;
+  String errorString_;
+  String name_;
+  String help_;
+  bool exists_ = false;
+  String prefixChars_;
 };
 //------------------------------------------------------------------
 template<typename CharT>
-BaseArg<CharT>*
+std::shared_ptr<BaseArgImpl<CharT>>
    ArgumentParser<CharT>::getOptional(std::basic_string_view<CharT> argOption)
 {
   auto it = std::find_if(std::begin(optional_), std::end(optional_),
@@ -116,61 +111,37 @@ BaseArg<CharT>*
 }
 //------------------------------------------------------------------
 template<typename CharT>
-bool ArgumentParser<CharT>::checkCount(BaseArg<CharT> *arg, std::size_t count)
-{
-  using namespace StringUtils::literals;
-
-  if(count < arg->minCount_) // || count > arg->maxCount_)
-  {
-    errorString_= "Error: argument '"_lv+
-                  makeOptions(arg)+
-                  "': expected values count: "_lv+
-                  StringUtils::toString<CharT>(arg->minCount_);
-
-    if(arg->minCount_ != arg->maxCount_)
-      errorString_+= ".."_lv+
-                  StringUtils::toString<CharT>(arg->minCount_);
-
-    return false;
-  }
-  return true;
-}
-//------------------------------------------------------------------
-template<typename CharT>
 template<typename Iter>
 bool ArgumentParser<CharT>::pasrePositional(Iter first, Iter last)
 {
   std::size_t totalCount= std::distance(first,last);
 
   for(auto argIt=std::begin(positional_);
-      argIt!=std::end(positional_);
-      ++argIt)
+           argIt!=std::end(positional_);
+           ++argIt)
   {
-     (*argIt)->exists_= true;
+    (*argIt)->exists_= true;
 
-     const std::size_t shouldRemain=
-         std::accumulate(std::next(argIt), std::end(positional_), 0u,
-                    [](std::size_t sum,auto arg)
-                    {
-                      return sum + arg->minCount_;
-                    });
+    const std::size_t shouldRemain=
+        std::accumulate(std::next(argIt), std::end(positional_), 0u,
+                        [](std::size_t sum,auto arg)
+    {
+        return sum + arg->minCount_;
+    });
 
-     const std::size_t available = (shouldRemain > totalCount)
-                              ? totalCount
-                              : totalCount-shouldRemain;
+    const std::size_t available = (shouldRemain > totalCount)
+        ? totalCount
+        : totalCount-shouldRemain;
 
-     const std::size_t count = std::min((*argIt)->maxCount_,available);
-     auto lastValue = std::next(first,count);
-     for( ; first!=lastValue; ++first)
-     {
-       if(!(*argIt)->tryAssignOrAppend(*first,prefixChars_,errorString_))
-         return false;
-     }
+    const std::size_t count= std::min((*argIt)->maxCount(),available);
+    auto lastValueOfArgIt= std::next(first,count);
 
-     if(!checkCount(*argIt,count))
-       return false;
+    if(!(*argIt)->tryAssingFromStrings(first,lastValueOfArgIt,
+                                       prefixChars_,errorString_))
+      return false;
 
-     totalCount -= count;
+    first =lastValueOfArgIt;
+    totalCount -= count;
   }
   return true;
 }
@@ -181,7 +152,7 @@ Iter ArgumentParser<CharT>::parseOptional(Iter first, Iter last)
 {
   while(first!=last)
   {        
-     BaseArg<CharT>* arg = getOptional(*first);
+     auto arg = getOptional(*first);
      if(!arg)
      {
        // ??
@@ -198,18 +169,13 @@ Iter ArgumentParser<CharT>::parseOptional(Iter first, Iter last)
                                prefixChars_));
 
      const std::size_t count= std::distance(first,nextOptionIt);
-     if(!checkCount(arg,count))
-     {
-       return first;
-     }
+     const std::size_t currentArgCount= std::min(count,arg->maxCount());
+     auto lastValueOfArgIt= std::next(first,currentArgCount);
 
-     const std::size_t currentArgCount= std::min(count,arg->maxCount_);
-     auto lastValueOfArgIt = std::next(first,currentArgCount);
-     for( ; first!=lastValueOfArgIt; ++first)
-     {
-       if(!arg->tryAssignOrAppend(*first,prefixChars_,errorString_))
-         return first;
-     }
+     if(!arg->tryAssingFromStrings(first,lastValueOfArgIt,
+                                   prefixChars_,errorString_))
+       return first;
+
      first = lastValueOfArgIt;
   }
 
@@ -219,7 +185,7 @@ Iter ArgumentParser<CharT>::parseOptional(Iter first, Iter last)
     {
       using namespace StringUtils::literals;
       errorString_= "Error: the following argument are required:'"_lv+
-                     makeUsage(arg,prefixChars_)+"'"_lv;
+                     makeUsage(arg.get(),prefixChars_)+"'"_lv;
       return first;
     }
   }
@@ -230,8 +196,6 @@ template<typename CharT>
 template<typename Iter>
 bool ArgumentParser<CharT>::parse(Iter first, Iter last)
 {
-  using namespace StringUtils::literals;
-
   auto endItOfPositional=
       std::find_if(first,last,
                    std::bind(StringUtils::isOption<String>,
@@ -250,6 +214,7 @@ bool ArgumentParser<CharT>::parse(Iter first, Iter last)
   {
     if(subParsers_.empty())
     {
+       using namespace StringUtils::literals;
        errorString_= "Error: unrecognized arguments: '"_lv+
                      String(*it)+"'"_lv;
        return false;
@@ -262,6 +227,7 @@ bool ArgumentParser<CharT>::parse(Iter first, Iter last)
                         {
                           return parser->name_== *it;
                         });
+
        invalidChoice = (parserIt==std::end(subParsers_));             
        if(!invalidChoice)
        {
@@ -279,12 +245,11 @@ bool ArgumentParser<CharT>::parse(Iter first, Iter last)
 
   if(invalidChoice)
   {
-    errorString_ =  "Error: invalid choice: '3' (choose from "_lv;
-    for(std::size_t i=0; i<subParsers_.size(); ++i)
-    {
-       if(i!=0) errorString_ += ", "_lv;
-       errorString_ +=  "'"_lv+subParsers_[i]->name_+"'"_lv;
-    }
+    using namespace StringUtils::literals;
+    errorString_ = "Error: invalid choice: '3' (choose from '"_lv
+                    +subParsers_.at(0)->name_+"'"_lv;
+    for(std::size_t i=1; i<subParsers_.size(); ++i)
+       errorString_ +=  ", '"_lv+subParsers_[i]->name_+"'"_lv;
     errorString_ += ")"_lv;
     return false;
   }
@@ -317,29 +282,18 @@ bool ArgumentParser<CharT>::parseCmdLine(const ArgumentParser::String &str)
 }
 //------------------------------------------------------------------
 template <typename CharT>
-ArgumentParser<CharT>*
+typename ArgumentParser<CharT>::ArgumentParserPtr
    ArgumentParser<CharT>::addSubParser(const ArgumentParser::String &name)
 {
-   ArgumentParser* parser= new ArgumentParser;
+   ArgumentParserPtr parser= new ArgumentParser;
    parser->name_= name;
    subParsers_.push_back(parser);
    return parser;
 }
-//------------------------------------------------------------------
-template<typename CharT>
-ArgumentParser<CharT>::~ArgumentParser()
-{
-  for(auto optPtr:optional_)
-     delete optPtr;
-  for(auto posPtr:positional_)
-     delete posPtr;
-  for(auto parserPtr:subParsers_)
-     delete parserPtr;
-}
 //----------------------------------------------------------------------------
 template<typename CharT>
 template<typename T,  std::size_t minCount, std::size_t maxCount>
-Arg<T, CharT,TypeUtils::caseOfMaxCount<T,CharT,maxCount>()>*
+Arg<T, TypeUtils::groupOfMaxCount<T,maxCount,CharT>(), CharT>
   ArgumentParser<CharT>::addArgument(
       const ArgumentParser<CharT>::String & shortOption,
       const ArgumentParser<CharT>::String & longOption,
@@ -348,54 +302,59 @@ Arg<T, CharT,TypeUtils::caseOfMaxCount<T,CharT,maxCount>()>*
    static_assert(TypeUtils::TypeInfo<T>::isRegistred,
                 "Not allowed type for arg!");
 
-   constexpr const auto case_=
-      TypeUtils::caseOfMaxCount<T,CharT,maxCount>();
+   constexpr const TypeGroup group=
+      TypeUtils::groupOfMaxCount<T,maxCount,CharT>();
 
-   auto arg =
-      new Arg<T,CharT,case_>(shortOption,longOption,required);
-
-   arg->minCount_= minCount;
-   arg->maxCount_= maxCount;
+   std::shared_ptr<ArgImpl<T,group,CharT>>
+      argImplPtr(new ArgImpl<T,group,CharT>(shortOption,longOption,required));
+   argImplPtr->minCount_= minCount;
+   argImplPtr->maxCount_= maxCount;
 
    if(!StringUtils::isOption(shortOption, prefixChars_) &&
       !StringUtils::isOption(longOption,  prefixChars_))
-      positional_.push_back(arg);
+      positional_.push_back(argImplPtr);
    else
-      optional_.push_back(arg);
+      optional_.push_back(argImplPtr);
 
-   return arg;
+   return Arg<T,group,CharT>(argImplPtr);
 }
 //----------------------------------------------------------------------------
 template<typename CharT>
 template <typename T, NArgs nargs>
-Arg<T, CharT,TypeUtils::caseOfNArgs<T, CharT, nargs>() >*
+Arg<T, TypeUtils::groupOfNArgs<T,nargs,CharT>(),CharT>
      ArgumentParser<CharT>::addArgument(
                               const ArgumentParser<CharT>::String& shortOption,
                               const ArgumentParser<CharT>::String& longOption,
                               bool required)
 {
+   constexpr const std::size_t maxCount=
+      std::numeric_limits<std::size_t>::max();
+
    if constexpr(nargs==NArgs::optional)
      return addArgument<T,0,1>(shortOption,longOption,required);
    else if constexpr(nargs==NArgs::zeroOrMore)
-     return addArgument<T,0,std::numeric_limits<std::size_t>::max()>(shortOption,longOption,required);
+     return addArgument<T,0,maxCount>(shortOption,longOption,required);
    else if constexpr(nargs==NArgs::oneOrMore)
-     return addArgument<T,1,std::numeric_limits<std::size_t>::max()>(shortOption,longOption,required);
+     return addArgument<T,1,maxCount>(shortOption,longOption,required);
 }
 //----------------------------------------------------------------------------
 template<typename CharT>
 template <typename T,char nargs>
-Arg<T, CharT,TypeUtils::caseOfNArgs<T, CharT, nargs>()> *
+Arg<T, TypeUtils::groupOfNArgs<T,nargs>(),CharT>
     ArgumentParser<CharT>::addArgument(
                               const ArgumentParser<CharT>::String& shortOption,
                               const ArgumentParser<CharT>::String& longOption,
                               bool required)
 {
+   constexpr const std::size_t maxCount=
+     std::numeric_limits<std::size_t>::max();
+
    if constexpr(nargs=='?')
      return addArgument<T,0,1>(shortOption,longOption,required);
    else if constexpr(nargs=='*')
-     return addArgument<T,0,std::numeric_limits<std::size_t>::max()>(shortOption,longOption,required);
+     return addArgument<T,0,maxCount>(shortOption,longOption,required);
    else if constexpr(nargs=='+')
-     return addArgument<T,1,std::numeric_limits<std::size_t>::max()>(shortOption,longOption,required);
+     return addArgument<T,1,maxCount>(shortOption,longOption,required);
 
    static_assert( nargs=='?' || nargs=='*' || nargs=='+',
        "Error: wrong nargs option!");
@@ -406,17 +365,12 @@ typename ArgumentParser<CharT>::String
   ArgumentParser<CharT>::subParsersUsage() const
 {
   using namespace StringUtils::literals;
-  String params = "{"_lv;
-  for(std::size_t i=0; i<subParsers_.size(); ++i)
-  {
-    if(i>0)
-      params+= ","_lv;
-    params+= subParsers_[i]->name_;
-  }
+  String params= "{"_lv+(subParsers_.empty()?String():subParsers_[0]->name_);
+  for(std::size_t i=1; i<subParsers_.size(); ++i)
+      params+= ","_lv+subParsers_[i]->name_;
   params+= "}"_lv;
   return params;
 }
-
 //---------------------------------------------------------------------------------------
 template<typename CharT>
 typename ArgumentParser<CharT>::String

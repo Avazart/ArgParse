@@ -98,10 +98,16 @@ template<typename S>
 inline auto strToULongLong(S str){ return detail::makeStrTo(std::strtoull)(str); };
 
 template<typename S>
-inline auto strToFloat(S str){ return detail::makeStrTo(std::strtof)(str); };
+auto strToFloat(S str){ return detail::makeStrTo(std::strtof)(str); };
 
-template<typename S>
-inline auto strToDouble(S str){ return detail::makeStrTo(std::strtod)(str); };
+template<typename CharT>
+inline auto strToDouble(std::basic_string<CharT> str)
+{
+  if constexpr(std::is_same_v<CharT,char>)
+     return detail::makeStrTo(std::strtod)(str);
+  else
+     return detail::makeStrTo(std::wcstod)(str);
+};
 
 template<typename S>
 inline auto strToLongDouble(S str){ return detail::makeStrTo(std::strtold)(str); };

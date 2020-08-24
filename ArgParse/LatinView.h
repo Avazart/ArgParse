@@ -34,78 +34,78 @@ std::size_t strLength(const T& str)
 //-----------------------------------------------------------
 class LatinView: public std::string_view
 {
-  public:
-      LatinView(const std::string_view& sv)
-          :std::string_view(sv){}
+public:
+  LatinView(const std::string_view& sv)
+    :std::string_view(sv){}
 
-      LatinView(const char* s, std::size_t count)
-          :std::string_view(s,count){};
+  LatinView(const char* s, std::size_t count)
+    :std::string_view(s,count){};
 
 
-      LatinView(const LatinView& other)
-          :std::string_view(other){};
+  LatinView(const LatinView& other)
+    :std::string_view(other){};
 
-      // String
-      operator std::string() const
-      {
-        return std::string(begin(),end());
-      }
-      // WString
-      template<typename CharT>
-      std::basic_string<CharT> toString()const
-      {
-        return std::basic_string<CharT>(begin(),end());
-      }
+  // String
+  operator std::string() const
+  {
+    return std::string(begin(),end());
+  }
+  // WString
+  template<typename CharT>
+  std::basic_string<CharT> toString()const
+  {
+    return std::basic_string<CharT>(begin(),end());
+  }
 
-      template<typename CharT>
-      operator std::basic_string<CharT>()const
-      {
-        return toString<CharT>();
-      }
+  template<typename CharT>
+  operator std::basic_string<CharT>()const
+  {
+    return toString<CharT>();
+  }
 
-      // EQUAL  String
-      template<typename CharT>
-      friend bool operator==(const std::basic_string<CharT>& str,
-                             const LatinView& lv);
+  // EQUAL  String
+  template<typename CharT>
+  friend bool operator==(const std::basic_string<CharT>& str,
+                         const LatinView& lv);
 
-      template<typename CharT>
-      friend bool operator==(const LatinView& lv,
-                             const std::basic_string<CharT>& str);
+  template<typename CharT>
+  friend bool operator==(const LatinView& lv,
+                         const std::basic_string<CharT>& str);
 
-      template<typename CharT>
-      friend bool operator!=(const std::basic_string<CharT>& str,
-                             const LatinView& lv);
+  template<typename CharT>
+  friend bool operator!=(const std::basic_string<CharT>& str,
+                         const LatinView& lv);
 
-      template<typename CharT>
-      friend bool operator!=(const LatinView& lv,
-                             const std::basic_string<CharT>& str);
+  template<typename CharT>
+  friend bool operator!=(const LatinView& lv,
+                         const std::basic_string<CharT>& str);
 
-      // EQUAL  CharT
-      template<typename CharT>
-      friend bool operator==(const CharT* cstr,const LatinView& lv);
+  // EQUAL  CharT
+  template<typename CharT>
+  friend bool operator==(const CharT* cstr,const LatinView& lv);
 
-      template<typename CharT>
-      friend bool operator==(const LatinView& lv,const CharT* cstr);
+  template<typename CharT>
+  friend bool operator==(const LatinView& lv,const CharT* cstr);
 
-      template<typename CharT>
-      friend bool operator!=(const CharT* cstr, const LatinView& lv);
+  template<typename CharT>
+  friend bool operator!=(const CharT* cstr, const LatinView& lv);
 
-      template<typename CharT>
-      friend bool operator!=(const LatinView& lv,const CharT* cstr);
+  template<typename CharT>
+  friend bool operator!=(const LatinView& lv,const CharT* cstr);
 
-      // CONCAT
-      template<typename CharT>
-      friend std::basic_string<CharT>
-      operator+(const LatinView& l,const std::basic_string<CharT>& r);
+  // CONCAT
+  template<typename CharT>
+  friend std::basic_string<CharT>
+  operator+(const LatinView& l,const std::basic_string<CharT>& r);
 
-      template<typename CharT>
-      friend std::basic_string<CharT>
-      operator+(const std::basic_string<CharT>& l,const LatinView& r);
+  template<typename CharT>
+  friend std::basic_string<CharT>
+  operator+(const std::basic_string<CharT>& l,const LatinView& r);
 
-   private:
-      template< typename CharT1,typename CharT2>
-      static bool equal(const CharT1* cstr1,std::size_t size1,
-                        const CharT2* cstr2,std::size_t size2);
+private:
+  template< typename CharT1,typename CharT2>
+  static bool equal(const CharT1* cstr1,std::size_t size1,
+                    const CharT2* cstr2,std::size_t size2);
 };
 //----------------------------------------------------------------------------
 // EQUAL

@@ -4,27 +4,32 @@
 #include "../ArgParse/ArgumentParser.h"
 //------------------------------------------------------------------
 template<typename T>
-void printArg(T* arg)
+void printArg(const T& arg)
 {
-  if(!arg->exists())
-  {
-    std::cout << "Arg '"<< arg->makeOptions() << "' not exists!"<<std::endl;
-    return;
-  }
+//  if(!arg.exists())
+//  {
+//    std::cout << "Arg not exists!"<<std::endl;
+//    return;
+//  }
 
-  std::cout << "Arg '"<< arg->makeOptions() << "' : ";
-  if(arg->hasValue())
+//  std::cout << "Arg '"<< arg->makeOptions() << "' : ";
+  if(arg)
   {
-     if constexpr(arg->isContainer)
+     if constexpr(arg.typeGroup()==ArgParse::TypeGroup::numbers ||
+                  arg.typeGroup()==ArgParse::TypeGroup::strings)
      {
        std::cout<< "[";
-       for(auto value: arg->values())
-          std::cout << "'"<<value << "', ";
+       for(std::size_t i=0; i< arg->size(); ++i)
+       {
+         if(i>0)
+            std::cout<< ", ";
+         std::cout << "'"<< arg.values()[i]<< "'";
+       }
        std::cout<< "] "<<std::endl;
      }
      else
      {
-       std::cout<<"'"<<arg->value()<<"'"<<std::endl;
+       std::cout<<"'"<< *arg<<"'"<<std::endl;
      }
   }
   else
@@ -39,9 +44,22 @@ int main(/*int argc, char *argv[]*/)
   using namespace ArgParse;
 
   ArgumentParser parser;
-  auto prog = parser.addArgument<std::string,1,1>("prog");
 
-  std::cout << prog->typeId() << std::endl;
+  IntArg<'?'> p1 = parser.addArgument<int>("p1");
+  p1= 10;
+
+  IntArg<'+'> p2 = parser.addArgument<int,'+'>("p2");
+  std::vector<int> vi{0,1,2};
+  p2 = vi;
+
+  printArg(p2);
+
+  StringArg<'?'> p3 = parser.addArgument<std::string>("p3");
+  p3= "10";
+
+  ArgumentParser<wchar_t> parser2;
+  StringArg<'?',wchar_t> p4 = parser2.addArgument<std::wstring>(L"p4");
+  p4= L"10";
 
 //  auto p1 = parser.addArgument<bool,'?'>("p1");
 //  auto p2 = parser.addArgument<int,'+'>("p2");

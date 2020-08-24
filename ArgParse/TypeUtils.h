@@ -71,31 +71,31 @@ TI_REGISTER_TYPE(std::wstring, "wstring", [](auto s){ return s; } );
 //----------------------------------------------------------------
 #undef TI_REGISTER_TYPE
 //----------------------------------------------------------------
-enum class Case { number, numbers, string, strings };
+enum class Group { number, numbers, string, strings };
 enum class NArgs{ optional, zeroOrMore, oneOrMore  };
 //----------------------------------------------------------------
-template<typename T,typename CharT,std::size_t maxCount>
-constexpr Case caseOfMaxCount()
+template<typename T,std::size_t maxCount,typename CharT=char>
+constexpr Group groupOfMaxCount()
 {
    return (maxCount>1)
-            ? (IsBasicStringV<T,CharT> ?Case::strings :Case::numbers)
-            : (IsBasicStringV<T,CharT> ?Case::string  :Case::number);
+            ? (IsBasicStringV<T,CharT> ?Group::strings :Group::numbers)
+            : (IsBasicStringV<T,CharT> ?Group::string  :Group::number);
 };
 //----------------------------------------------------------------
-template<typename T,typename CharT,NArgs nargs>
-constexpr Case caseOfNArgs()
+template<typename T,NArgs nargs,typename CharT=char>
+constexpr Group groupOfNArgs()
 {
    return (nargs!=NArgs::optional)
-             ? (IsBasicStringV<T,CharT> ?Case::strings :Case::numbers)
-             : (IsBasicStringV<T,CharT> ?Case::string  :Case::number);
+             ? (IsBasicStringV<T,CharT> ?Group::strings :Group::numbers)
+             : (IsBasicStringV<T,CharT> ?Group::string  :Group::number);
 };
 //----------------------------------------------------------------
-template<typename T,typename CharT,char nargs>
-constexpr Case caseOfNArgs()
+template<typename T,char nargs,typename CharT=char>
+constexpr Group groupOfNArgs()
 {
    return (nargs!='?')
-           ? (IsBasicStringV<T,CharT> ?Case::strings :Case::numbers)
-           : (IsBasicStringV<T,CharT> ?Case::string  :Case::number);
+           ? (IsBasicStringV<T,CharT> ?Group::strings :Group::numbers)
+           : (IsBasicStringV<T,CharT> ?Group::string  :Group::number);
 };
 //----------------------------------------------------------------
 template<typename T, typename = std::void_t<> >
@@ -107,14 +107,13 @@ struct HasValueType<T,std::void_t<typename T::value_type>>: std::true_type{};
 template<typename T>
 inline constexpr bool HasValueTypeV= HasValueType<T>::value;
 //----------------------------------------------------------------------------
-template<typename T,typename CharT,
-         bool = IsBasicStringV<T,CharT>>
+template<typename T,typename CharT, bool = IsBasicStringV<T,CharT>>
 struct RangeType
 {
    using type= typename T::size_type;
 };
 
-template<typename T,typename CharT>
+template<typename CharT,typename T>
 struct RangeType<T,CharT,false>
 {
   using type= T;
