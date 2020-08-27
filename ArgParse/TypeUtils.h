@@ -10,8 +10,7 @@ namespace ArgParse::TypeUtils
 {
 //----------------------------------------------------------------
 template<typename T,typename CharT>
-constexpr bool IsBasicStringV=
-    std::is_same_v<T,std::basic_string<CharT>>;
+constexpr bool IsBasicStringV= std::is_same_v<T,std::basic_string<CharT>>;
 //----------------------------------------------------------------
 template<typename T>
 struct TypeInfo

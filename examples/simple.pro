@@ -10,7 +10,6 @@ SOURCES += \
 INCLUDEPATH+= ../ArgParse/
 
 HEADERS += \
-  ../ArgParse/Arg.h \
   ../ArgParse/ArgumentParser.h \
   ../ArgParse/ArgumentParserDetail.h \
   ../ArgParse/StringUtils.h \
