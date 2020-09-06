@@ -443,13 +443,15 @@ auto repeatString(const String& str,
                 +count>maxCount?3:0);
    out= str;
 
-   for(size_t i=1; i<std::min(count,maxCount); ++i)
+   const std::size_t m= count<=maxCount? count : 2;
+   for(size_t i=1; i<m; ++i)
      out+= delemiter+str;
 
    if(count>maxCount)
    {
      out+= delemiter;
      out+= LatinView("...");
+     out+= delemiter+str;
    }
 
    return out;

@@ -457,6 +457,8 @@ auto optionNameWithoutPrefix(const std::shared_ptr<ArgInfo<CharT>>& arg,
      return prefixChars.find(c)!= String::npos;
   });
   name.erase(begin(name),it);
+  if(arg->argType()==ArgType::optional)
+    transform(begin(name),end(name),begin(name),toupper);
   return name;
 }
 //----------------------------------------------------------------
@@ -469,10 +471,9 @@ auto makeUsage(const std::shared_ptr<ArgInfo<CharT>>& arg,
   using namespace StringUtils::literals;
   using StringUtils::repeatString;
 
-  String name = optionNameWithoutPrefix(arg,prefixChars);
+  const String name= optionNameWithoutPrefix(arg,prefixChars);
   if(arg->argType()==ArgType::optional)
   {
-    transform(begin(name),end(name),begin(name),toupper);
     return "["_lv
              +(arg->shortOption().empty()?arg->longOption()
                                          :arg->shortOption())
@@ -493,16 +494,25 @@ auto makeHelpLine(const std::shared_ptr<ArgInfo<CharT>>& arg,
   using namespace StringUtils::literals;
   using String = std::basic_string<CharT>;
   using detail::makeUsage;
+  using StringUtils::repeatString;
+
+  const String name= optionNameWithoutPrefix(arg,prefixChars);
 
   String helpLine;
   if(!arg->shortOption().empty())
-    helpLine += arg->shortOption()+" "_lv+makeUsage(arg,prefixChars);
+  {
+    helpLine += arg->shortOption();
+    if(arg->argType()==ArgType::optional)
+      helpLine += " "_lv+repeatString(name,arg->minCount());
+  }
 
   if(!arg->longOption().empty())
   {
     if(!helpLine.empty())
-      helpLine +=", "_lv;
-    helpLine += arg->longOption()+" "_lv+makeUsage(arg,prefixChars);
+      helpLine +=", "_lv;    
+    helpLine += arg->longOption();
+    if(arg->argType()==ArgType::optional)
+        helpLine +=" "_lv+repeatString(name,arg->minCount());
   }
 
   if(!arg->help().empty())
@@ -1200,6 +1210,8 @@ ArgumentParser<CharT>::help(bool recursive, std::size_t level) const
 
   if(!optional_.empty())
   {
+    if(!positional_.empty() || !subParsers_.empty())
+      helpStr+= '\n';
     helpStr += indent(level)+"optional arguments:\n"_lv;
     for(auto arg: optional_)
       helpStr+= indent(level+1)+makeHelpLine(arg,prefixChars_)+"\n"_lv;

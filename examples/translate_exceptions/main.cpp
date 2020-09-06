@@ -28,12 +28,15 @@ int main(/*int argc, char *argv[]*/)
   auto p = parser.addArgument<string,2,3>("p");
   p.setMinLength(1);
   p.setMaxLength(2);
-  auto o = parser.addArgument<int,'+'>("-o","--opt");
+  p.setHelp("- first positional arg");
+  auto o = parser.addArgument<int,1,1>("-o","--opt");
   o.setRange(5,15);
+  o.setHelp("- first optional arg");
   auto subParser1 = parser.addSubParser("cmd1");
   auto subParser2 = parser.addSubParser("cmd2");
 
   cout<<"usage: "<< parser.usage() << endl << endl;
+  cout<< parser.help() << endl << endl;
 
   for(const string& cmdLine: cmdLines)
   {
