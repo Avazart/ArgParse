@@ -3,6 +3,7 @@
 //-----------------------------------------------------------
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <cstring>
 #include <algorithm>
 //-----------------------------------------------------------
@@ -30,6 +31,26 @@ template <typename T>
 std::size_t strLength(const T& str)
 {
   return std::size(str);
+}
+//-----------------------------------------------------------
+template <typename T>
+auto strBegin(T str)
+{
+  if constexpr(std::is_same_v<T,const char*> ||
+               std::is_same_v<T,const wchar_t*>)
+    return str;
+  else
+    return std::begin(str);
+}
+
+template <typename T>
+auto strEnd(T str)
+{
+  if constexpr(std::is_same_v<T,const char*> ||
+               std::is_same_v<T,const wchar_t*>)
+    return str+strLength(str);
+  else
+    return std::end(str);
 }
 //-----------------------------------------------------------
 class LatinView: public std::string_view

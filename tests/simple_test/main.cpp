@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -7,6 +8,79 @@
 
 using namespace ArgParse;
 using namespace std::literals;
+
+
+TEST(StringUtils, strToBool)
+{
+  using namespace StringUtils;
+
+  ASSERT_EQ(strToBool<char>("0"), 0);
+  ASSERT_EQ(strToBool<char>("1"), 1);
+
+  ASSERT_EQ(strToBool<char>("true"), true);
+  ASSERT_EQ(strToBool<char>("false"), false);
+
+  ASSERT_THROW(strToBool<char>("00"), std::invalid_argument);
+  ASSERT_THROW(strToBool<char>("2"),  std::invalid_argument);
+  ASSERT_THROW(strToBool<char>("-1"), std::invalid_argument);
+  ASSERT_THROW(strToBool<char>("true1"), std::invalid_argument);
+  ASSERT_THROW(strToBool<char>("1true"), std::invalid_argument);
+}
+
+TEST(StringUtils, strToInt)
+{
+  using namespace StringUtils;
+
+  ASSERT_LT(sizeof(int),sizeof(long long));
+
+  ASSERT_EQ(strToInt<char>("10"), 10);
+  ASSERT_EQ(strToInt<char>("-10"), -10);
+  ASSERT_THROW(strToInt<char>("abc"),       std::invalid_argument);
+  ASSERT_THROW(strToInt<char>("10abc"),     std::invalid_argument);
+
+  const long long maxInt = std::numeric_limits<int>::max();
+  const long long lowestInt= std::numeric_limits<int>::lowest();
+
+  ASSERT_THROW(strToInt<char>(std::to_string(maxInt+1)),std::out_of_range);
+  ASSERT_THROW(strToInt<char>(std::to_string(lowestInt-1)),std::out_of_range);
+}
+
+TEST(StringUtils, strToUInt)
+{
+  using namespace StringUtils;
+
+  ASSERT_LT(sizeof(int),sizeof(long long));
+
+  ASSERT_EQ(strToUInt<char>("10"), 10);
+  ASSERT_THROW(strToUInt<char>("-10"),std::out_of_range);
+  ASSERT_THROW(strToUInt<char>("abc"),       std::invalid_argument);
+  ASSERT_THROW(strToUInt<char>("10abc"),     std::invalid_argument);
+
+  const long long maxUInt = std::numeric_limits<unsigned int>::max();
+  const long long lowestUInt= std::numeric_limits<unsigned int>::lowest();
+
+  ASSERT_THROW(strToUInt<char>(std::to_string(maxUInt+1)),std::out_of_range);
+  ASSERT_THROW(strToUInt<char>(std::to_string(lowestUInt-1)),std::out_of_range);
+}
+
+TEST(StringUtils, strToLong)
+{
+  using namespace StringUtils;
+
+  ASSERT_EQ(strToLong<char>("10"), 10);
+  ASSERT_EQ(strToLong<char>("-10"), -10);
+  ASSERT_THROW(strToLong<char>("abc"),   std::invalid_argument);
+  ASSERT_THROW(strToLong<char>("10abc"), std::invalid_argument);
+
+  ASSERT_LT(sizeof(long),sizeof(long long));
+
+  const long long maxLong = std::numeric_limits<long>::max();
+  const long long lowestLong= std::numeric_limits<long>::lowest();
+
+  ASSERT_THROW(strToLong<char>(std::to_string(maxLong+1)),std::out_of_range);
+  ASSERT_THROW(strToLong<char>(std::to_string(lowestLong-1)),std::out_of_range);
+}
+
 
 TEST(split_cmd_line, test_quote)
 {
@@ -35,6 +109,67 @@ TEST(common,LatinView)
 
   ASSERT_FALSE("123"_lv != "123"s);
   ASSERT_FALSE("123"_lv != L"123"s);
+}
+
+TEST(common,Exceptions)
+{
+  ArgumentParser parser;
+  auto p0 = parser.addArgument<int,2,2>("p1");
+
+  ASSERT_THROW(parser.parseCmdLine("1"),
+               WrongCountException<char>);
+  parser.reset();
+
+  ASSERT_THROW(parser.parseCmdLine("1 2 3 4 5"),
+               UnrecognizedArgumentsException<char>);
+  parser.clear();
+
+  auto p1 = parser.addArgument<int,1,1>("p1");
+  const long long maxInt = std::numeric_limits<int>::max();
+  ASSERT_THROW(parser.parseCmdLine(std::to_string(maxInt+1)),
+                                   OutOfRangeException<char>);
+  parser.reset();
+
+  const long long lowestInt = std::numeric_limits<int>::lowest();
+  ASSERT_THROW(parser.parseCmdLine(std::to_string(lowestInt-1)),
+                                   OutOfRangeException<char>);
+  parser.reset();
+
+  p1.setRange(0,10);
+  ASSERT_THROW(parser.parseCmdLine("20"),OutOfRangeException<char>);
+  parser.reset();
+
+  ASSERT_THROW(parser.parseCmdLine("-20"),OutOfRangeException<char>);
+  parser.clear();
+
+  auto p2 = parser.addArgument<std::string,1,1>("p2");
+  p2.setMinLength(5);
+  ASSERT_THROW(parser.parseCmdLine("abc"),LengthErrorException<char>);
+  parser.reset();
+
+  p2.setMinLength(1);
+  p2.setMaxLength(2);
+  ASSERT_THROW(parser.parseCmdLine("abc"),LengthErrorException<char>);
+  parser.reset();
+
+  ASSERT_NO_THROW(parser.parseCmdLine("ab"));
+  auto p3 = parser.addArgument<int>("-r","--req",true);
+
+  ASSERT_NO_THROW(parser.parseCmdLine("ab --req"));
+  parser.reset();
+
+  ASSERT_THROW(parser.parseCmdLine("ab"),
+               ArgumentRequiredException<char>);
+  parser.reset();
+
+  ASSERT_THROW(parser.parseCmdLine("ab --c"),
+               UnrecognizedArgumentsException<char>);
+  parser.clear();
+
+
+
+  //
+  // Invalid chose
 }
 
 TEST(common,parseArgs)
@@ -209,7 +344,8 @@ TEST(positional_optional,n5) //  '?'
   auto p2 = parser.addArgument<int,'?'>("p2");
   auto p3 = parser.addArgument<int,'?'>("p3");
   // 5
-  ASSERT_NO_THROW(parser.parseCmdLine("1 2 3 4 5")) ;
+  ASSERT_THROW(parser.parseCmdLine("1 2 3 4 5"),
+               UnrecognizedArgumentsException<char>);
   ASSERT_TRUE(p1.hasValue());
   ASSERT_TRUE(p2.hasValue());
   ASSERT_TRUE(p3.hasValue());
@@ -514,9 +650,9 @@ TEST(positional_mixed6,n2) // *+*
   auto p3 = parser.addArgument<int,'*'>("p3");
   // 2
   ASSERT_NO_THROW(parser.parseCmdLine("1 2")) ;
-  ASSERT_EQ(p1.values(),(std::vector<int>{1}));
-  ASSERT_EQ(p2.values(),(std::vector<int>{2}));
-  ASSERT_EQ(p3.values(),(std::vector<int>{}));
+  ASSERT_EQ(*p1,(std::vector<int>{1}));
+  ASSERT_EQ(*p2,(std::vector<int>{2}));
+  ASSERT_EQ(*p3,(std::vector<int>{}));
 }
 
 TEST(positional_mixed6,n3) // *+*
@@ -527,9 +663,9 @@ TEST(positional_mixed6,n3) // *+*
   auto p3 = parser.addArgument<int,'*'>("p3");
   // 3
   ASSERT_NO_THROW(parser.parseCmdLine("1 2 3")) ;
-  ASSERT_EQ(p1.values(),(std::vector<int>{1,2}));
-  ASSERT_EQ(p2.values(),(std::vector<int>{3}));
-  ASSERT_EQ(p3.values(),(std::vector<int>{}));
+  ASSERT_EQ(*p1,(std::vector<int>{1,2}));
+  ASSERT_EQ(*p2,(std::vector<int>{3}));
+  ASSERT_EQ(*p3,(std::vector<int>{}));
 }
 
 TEST(positional_mixed6,n5) // *+*
@@ -540,15 +676,42 @@ TEST(positional_mixed6,n5) // *+*
   auto p3 = parser.addArgument<int,'*'>("p3");
   // 5
   ASSERT_NO_THROW(parser.parseCmdLine("1 2 3 4 5")) ;
-  ASSERT_EQ(p1.values(),(std::vector<int>{1,2,3,4}));
-  ASSERT_EQ(p2.values(),(std::vector<int>{5}));
-  ASSERT_EQ(p3.values(),(std::vector<int>{}));
+  ASSERT_EQ(*p1,(std::vector<int>{1,2,3,4}));
+  ASSERT_EQ(*p2,(std::vector<int>{5}));
+  ASSERT_EQ(*p3,(std::vector<int>{}));
 }
+
+TEST(subParsers,t1)
+{
+  ArgumentParser parser;
+  auto p1 = parser.addArgument<std::string,'+'>("p1");
+     auto subParser1 = parser.addSubParser("cmd1");
+     auto p2 = parser.addArgument<int>("p2");
+
+  ASSERT_NO_THROW(parser.parseCmdLine("a b c d"));
+
+  ASSERT_NO_THROW(parser.parseCmdLine("a b c d cmd1"));
+
+//  ArgumentParser parser;
+//  auto p1 = parser.addArgument<std::string,'+'>("p1");
+//  auto p2 = parser.addArgument<int>("-p2");
+
+//  auto subParser1 = parser.addSubParser("cmd1");
+//  auto p3 = subParser1->addArgument<int>("p3");
+
+//  auto subParser2 = parser.addSubParser("cmd2");
+//  auto p4 = subParser2->addArgument<int,'+'>("p4");
+//  auto p5 = subParser2->addArgument<int,'+'>("-p5");
+
+//  parser.parseCmdLine("a b c -p2 1 cmd2 5 6 -p5 7 8");
+}
+
+
 
 int main(int argc, char *argv[])
 {
   ::testing::InitGoogleTest(&argc, argv);
   // // --gtest_filter="positional.one_or_more"
-  //::testing::GTEST_FLAG(filter) = "common*";
+  //::testing::GTEST_FLAG(filter) = "subParsers*";
   return RUN_ALL_TESTS();
 }

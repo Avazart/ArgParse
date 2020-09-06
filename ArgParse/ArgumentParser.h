@@ -27,6 +27,14 @@ using TypeGroup = TypeUtils::Group;
 
 template <typename T>
 using TypeInfo = TypeUtils::TypeInfo<T>;
+
+template <typename T>
+using SequenceT = std::vector<T>;
+
+template <typename StringT>
+using StringsT= std::vector<StringT>;
+
+enum class ArgType{ invalid, positional, optional };
 //----------------------------------------------------------------------------
 // pre define for friend access
 
@@ -36,27 +44,28 @@ class ArgumentParser;
 template<typename T, TypeGroup group, typename CharT>
 class Arg;
 //----------------------------------------------------------------------------
-//                      Impl
+//                      ArgInfo
 //----------------------------------------------------------------------------
 template<typename CharT>
 class ArgInfo
 {
 public:
-  typedef std::basic_string<CharT> String;
-  typedef std::vector<String> Strings;
+  using String  = std::basic_string<CharT>;
+  using Strings = StringsT<String>;
 
   ArgInfo(const String& shortOption,
-              const String& longOption,
-              bool required)
+          const String& longOption,
+          bool required)
     :shortOption_(shortOption),
-      longOption_(longOption),
-      required_(required)
+     longOption_(longOption),
+     required_(required)
   {}
 
   virtual ~ArgInfo()=default;
 
   const String& shortOption()const { return shortOption_;  }
   const String& longOption() const { return longOption_;  }
+  String options() const;
 
   std::size_t maxCount()const{ return maxCount_; }
   std::size_t minCount()const{ return minCount_; }
@@ -67,7 +76,8 @@ public:
   const String& help()const { return help_;  }
   void setHelp(const String& help){ help_= help; }
 
-  virtual bool exists()const { return exists_; } ;
+  virtual bool exists()const { return exists_; }
+  virtual ArgType argType()const { return argType_; }
 
   virtual bool hasValue()const= 0;
   virtual void reset()= 0;
@@ -89,10 +99,25 @@ protected:
   std::size_t minCount_= 0;
   std::size_t maxCount_= std::numeric_limits<std::size_t>::max();
 
-  using StringsConstIterator = typename Strings::const_iterator;
+  ArgType argType_ = ArgType::invalid;
 
   virtual void assingOrAppendFromString(const String& str)=0;
 };
+//---------------------------------------------------------------------------------------
+template<typename CharT>
+typename ArgInfo<CharT>::String ArgInfo<CharT>::options() const
+{
+  if(shortOption_.empty())
+    return longOption_;
+
+  if(longOption_.empty())
+    return shortOption_;
+
+  using namespace StringUtils::literals;
+  return shortOption_+"/"_lv+longOption_;
+}
+//---------------------------------------------------------------------------------------
+//                       ArgImpl
 //---------------------------------------------------------------------------------------
 template<typename T, TypeGroup group, typename CharT>
 class ArgImpl
@@ -104,12 +129,10 @@ class ArgImpl
       group==TypeGroup::numbers || group==TypeGroup::strings;
 
 public:
-  using String= std::basic_string<CharT>;
-  using Strings= std::vector<String>;
-  using StringsConstIter= typename Strings::const_iterator;
-
   using Base= ArgInfo<CharT>;
-
+  using typename Base::String;
+  using typename Base::Strings;
+  using StringsConstIter= typename Base::Strings::const_iterator;
 
   using RangeValueType =
      std::conditional_t< TypeUtils::IsBasicStringV<T,CharT>,
@@ -118,7 +141,7 @@ public:
 
   using StorageType =
         std::conditional_t< isSequence,
-                            std::vector<T>,
+                            SequenceT<T>,
                             std::optional<T>>;
 
   using ValueType =
@@ -126,7 +149,7 @@ public:
                             T,
                             std::conditional_t< group==TypeGroup::string,
                                                 const T&,
-                                                const std::vector<T>&
+                                                const SequenceT<T>&
                                               >
                           >;
 
@@ -154,6 +177,7 @@ public:
 
   virtual void reset() override
   {
+    this->exists_ = false;
     if constexpr(isSequence)
       storage_.clear();
     else
@@ -191,7 +215,6 @@ private:
 
   StorageType storage_;
 };
-
 //---------------------------------------------------------------------------------------
 template< typename T, TypeGroup group, typename CharT>
 void ArgImpl<T, group, CharT>::
@@ -216,18 +239,17 @@ void ArgImpl<T, group, CharT>::
     this->storage_.push_back(value);
 }
 //---------------------------------------------------------------------------------------
-//             Arg < >
+//             BaseArg
 //---------------------------------------------------------------------------------------
 template< typename T, TypeGroup group,typename CharT>
 class BaseArg
 {
-protected:
+public:
   using Impl = ArgImpl<T,group,CharT>;
   using ValueType= typename Impl::ValueType;
+  using RangeValueType= typename Impl::RangeValueType;
+  using String= std::basic_string<CharT>;
 
-  std::shared_ptr<Impl> impl_;
-
-public:
   explicit BaseArg(std::shared_ptr<Impl> impl):impl_(impl){}
 
   bool exists()const   { return impl_->exists();   }
@@ -239,7 +261,16 @@ public:
   const auto* operator->()const { return &(impl_->storage());}
 
   static constexpr TypeGroup typeGroup(){ return group; }
+
+  void setHelp(const String& help){ impl_->setHelp(help); }
+
+  const std::shared_ptr<Impl>& info()const{ return impl_; }
+
+protected:
+  std::shared_ptr<Impl> impl_;
 };
+//---------------------------------------------------------------------------------------
+//                     Arg
 //---------------------------------------------------------------------------------------
 template< typename T, TypeGroup group, typename CharT=char>
 class Arg:public BaseArg<T,group,CharT>
@@ -251,8 +282,8 @@ class Arg<T, TypeGroup::numbers, CharT>
     :public BaseArg<T,TypeGroup::numbers,CharT>
 {
   using Base= BaseArg<T,TypeGroup::numbers,CharT>;
-  using RangeValueType= typename Base::Impl::RangeValueType;
-  using ValueType= typename Base::Impl::ValueType;
+  using typename Base::RangeValueType;
+  using typename Base::ValueType;
 
 public:
   explicit Arg(std::shared_ptr<typename Base::Impl> impl):Base(impl){}
@@ -279,8 +310,8 @@ class Arg<T,TypeGroup::strings,CharT>
     :public BaseArg<T,TypeGroup::strings,CharT>
 {
   using Base= BaseArg<T,TypeGroup::strings,CharT>;
-  using RangeValueType= typename Base::Impl::RangeValueType;
-  using ValueType= typename Base::Impl::ValueType;
+  using typename Base::RangeValueType;
+  using typename Base::ValueType;
 
 public:
   explicit Arg(std::shared_ptr<typename Base::Impl> impl):Base(impl){}
@@ -296,8 +327,15 @@ public:
     return *this;
   }
 
-  void setMinLength(RangeValueType minLength){ this->impl_->range_.first = minLength; }
-  void setMaxLength(RangeValueType maxLength){ this->impl_->range_.second= maxLength; }
+  void setMinLength(RangeValueType minLength)
+  {
+    this->impl_->range_.first = minLength;
+  }
+
+  void setMaxLength(RangeValueType maxLength)
+  {
+    this->impl_->range_.second= maxLength;
+  }
 };
 //---------------------------------------------------------------------------------------
 template<typename T,typename CharT>
@@ -305,8 +343,8 @@ class Arg<T,TypeGroup::number,CharT>
     :public BaseArg<T,TypeGroup::number,CharT>
 {
   using Base= BaseArg<T,TypeGroup::number,CharT>;
-  using RangeValueType= typename Base::Impl::RangeValueType;
-  using ValueType= typename Base::Impl::ValueType;
+  using typename Base::RangeValueType;
+  using typename Base::ValueType;
 
 public:
   explicit Arg(std::shared_ptr<typename Base::Impl> impl):Base(impl){}
@@ -334,8 +372,8 @@ class Arg<T,TypeGroup::string,CharT>
     :public BaseArg<T,TypeGroup::string,CharT>
 {
   using Base= BaseArg<T,TypeGroup::string,CharT>;
-  using RangeValueType= typename Base::Impl::RangeValueType;
-  using ValueType= typename Base::Impl::ValueType;
+  using typename Base::RangeValueType;
+  using typename Base::ValueType;
 
 public:
   explicit Arg(std::shared_ptr<typename Base::Impl> impl):Base(impl){}
@@ -377,62 +415,94 @@ using StringArg = ArgT<std::basic_string<CharT>, nargs, CharT>;
 //---------------------------------------------------------------------------------------
 namespace detail
 {
-//----------------------------------------------------------------------------
+//----------------------------------------------------------------
 template<typename CharT>
-auto makeOptions(ArgInfo<CharT>* arg)
+ArgType getArgType(const std::basic_string<CharT>& shortOption,
+                   const std::basic_string<CharT>& longOption,
+                   const std::basic_string<CharT>& prefixChars)
 {
-  using namespace StringUtils::literals;
+  using namespace std;
+  using StringUtils::hasPrefix;
 
-  if(arg->shortOption().empty())
-    return arg->longOption();
+  if(shortOption.empty() && longOption.empty())
+    return ArgType::invalid;
 
-  if(arg->longOption().empty())
-    return arg->shortOption();
+  const bool shortHasPrefix= hasPrefix(shortOption, prefixChars);
+  const bool longHasPrefix = hasPrefix(longOption, prefixChars);
 
-  return arg->shortOption()+"/"_lv+arg->longOption();
+  if(!shortHasPrefix && !longHasPrefix)
+     return ArgType::positional;
+
+  if((shortHasPrefix      && longHasPrefix) ||
+     (shortOption.empty() && longHasPrefix) ||
+     (shortHasPrefix      && longOption.empty()))
+     return ArgType::optional;
+
+  return ArgType::invalid;
 }
 //----------------------------------------------------------------
 template<typename CharT>
-auto makeUsage(ArgInfo<CharT>* arg,
+auto optionNameWithoutPrefix(const std::shared_ptr<ArgInfo<CharT>>& arg,
+                             const std::basic_string<CharT>& prefixChars)
+{
+  using namespace std;
+  using String = std::basic_string<CharT>;
+  String name= arg->longOption().empty()? arg->shortOption()
+                                        : arg->longOption();
+  auto it = find_if_not(begin(name),
+                        next(begin(name),
+                        std::min(2u,name.size())),
+                        [&prefixChars](CharT c)
+  {
+     return prefixChars.find(c)!= String::npos;
+  });
+  name.erase(begin(name),it);
+  return name;
+}
+//----------------------------------------------------------------
+template<typename CharT>
+auto makeUsage(const std::shared_ptr<ArgInfo<CharT>>& arg,
                const std::basic_string<CharT>& prefixChars)
 {
-  using String = std::basic_string<CharT>;
+  using String= std::basic_string<CharT>;
+  using namespace std;
   using namespace StringUtils::literals;
+  using StringUtils::repeatString;
 
-  String name_ = arg->longOption().empty()
-      ? arg->shortOption()
-      : arg->longOption();
-
-  auto it = std::find_if_not(std::begin(name_),
-                             std::next(std::begin(name_),
-                                       std::min(2u,name_.size())),
-                             [&prefixChars](CharT c)
-   {
-     return prefixChars.find(c)!= String::npos;
-   });
-
-  name_.erase(std::begin(name_),it);
-  if(arg->maxCount()>1)
-    name_ += " ["_lv+name_+" ...]"_lv;
-  return  name_;
+  String name = optionNameWithoutPrefix(arg,prefixChars);
+  if(arg->argType()==ArgType::optional)
+  {
+    transform(begin(name),end(name),begin(name),toupper);
+    return "["_lv
+             +(arg->shortOption().empty()?arg->longOption()
+                                         :arg->shortOption())
+             +" "_lv
+             +repeatString(name,arg->minCount())+
+            "]"_lv;
+  }
+  else
+  {
+    return repeatString(name,arg->minCount());
+  }
 }
 //-----------------------------------------------------------------------
 template<typename CharT>
-auto makeHelpLine(ArgInfo<CharT>* arg,
+auto makeHelpLine(const std::shared_ptr<ArgInfo<CharT>>& arg,
                   const std::basic_string<CharT>& prefixChars)
 {
   using namespace StringUtils::literals;
   using String = std::basic_string<CharT>;
+  using detail::makeUsage;
 
   String helpLine;
   if(!arg->shortOption().empty())
-    helpLine += arg->shortOption()+" "_lv+makeUsage(prefixChars);
+    helpLine += arg->shortOption()+" "_lv+makeUsage(arg,prefixChars);
 
   if(!arg->longOption().empty())
   {
     if(!helpLine.empty())
       helpLine +=", "_lv;
-    helpLine += arg->longOption()+" "_lv+makeUsage(prefixChars);
+    helpLine += arg->longOption()+" "_lv+makeUsage(arg,prefixChars);
   }
 
   if(!arg->help().empty())
@@ -450,49 +520,21 @@ class Exception
 {
 public:
    using String = std::basic_string<CharT>;
-   virtual String what()const=0;
-};
-//----------------------------------------------------------------------------------
-template <typename CharT>
-class CommonException: public Exception<CharT>
-{
-public:
-   using String = std::basic_string<CharT>;
    using ArgInfoPtr = std::shared_ptr<ArgInfo<CharT>>;
 
-   CommonException(const String& value,
-                   ArgInfoPtr arg,
-                    const String& prefixChars)
-    :Exception<CharT>(),
-     value_(value),
-     arg_(arg),
-     prefixChars_(prefixChars)
-    {
-    }
-
    virtual String what()const=0;
-
-   const String& value()const{ return value_; };
-   ArgInfoPtr arg()const{ return arg_; };
-   const String& prefixChars()const{return prefixChars_;}
-
-private:
-   String value_;
-   ArgInfoPtr arg_;
-   String prefixChars_;
 };
 //----------------------------------------------------------------------------------
 template <typename CharT>
-class WrongCountException: public CommonException<CharT>
+class WrongCountException: public Exception<CharT>
 {
 public:
-   using String= typename CommonException<CharT>::String;
-   using ArgInfoPtr= typename CommonException<CharT>::ArgInfoPtr;
+  using String= typename Exception<CharT>::String;
+  using ArgInfoPtr= typename Exception<CharT>::ArgInfoPtr;
 
-  WrongCountException(const String& value,
-                      ArgInfoPtr arg,
-                      const String& prefixChars)
-    :CommonException<CharT>(value,arg,prefixChars)
+  WrongCountException(ArgInfoPtr arg)
+    :Exception<CharT>(),
+      arg_(arg)
   {
   }
 
@@ -500,109 +542,142 @@ public:
   {
     using namespace StringUtils::literals;
     String msg=
-      "Error: argument '"_lv+
-      detail::makeOptions(arg().get())+
-      "': expected values count: "_lv+
-      StringUtils::toString<CharT>(arg()->minCount());
+        "argument '"_lv+arg()->options()+
+        "': expected values count: "_lv+
+        StringUtils::toString<CharT>(arg()->minCount());
 
     if(arg()->minCount() != arg()->maxCount())
-      msg+= ".."_lv+ StringUtils::toString<CharT>(arg()->minCount());
+      msg+= ".."_lv+ StringUtils::toString<CharT>(arg()->maxCount());
 
     return msg;
   }
+
+  ArgInfoPtr arg()const{ return arg_; };
+private:
+  ArgInfoPtr arg_;
 };
 //----------------------------------------------------------------------------------
 template <typename CharT>
-class InvalidChoiseException: public Exception<CharT>
+class InvalidChoiceException: public Exception<CharT>
 {
 public:
-   using String= typename CommonException<CharT>::String;
-   using Strings= std::vector<String>;
-   using ArgInfoPtr= typename CommonException<CharT>::ArgInfoPtr;
+  using String= typename Exception<CharT>::String;
+  using Strings= StringsT<String>;
+  using ArgInfoPtr= typename Exception<CharT>::ArgInfoPtr;
 
-   InvalidChoiseException(const Strings& subParserNames)
+  InvalidChoiceException(const String& value,
+                         const Strings& possibleChoice)
     :Exception<CharT>(),
-     subParserNames_(subParserNames)
-   {
-   }
+     value_(value),
+     possibleChoice_(possibleChoice)
+  {
+  }
 
-   virtual String what()const override
-   {
-     using namespace StringUtils::literals;
-     String msg =
-        "Error: invalid choice: '3' (choose from '"_lv+
-        subParserNames_[0]+"'"_lv;
+  virtual String what()const override
+  {
+    using namespace std::literals;
+    using namespace StringUtils::literals;
+    using StringUtils::join;
+    return
+      "invalid choice: '"_lv+value_+"' "
+      "(choose from "_lv+join(possibleChoice_,", ",'\'','\'')+")"_lv;
+  }
 
-     for(std::size_t i=1; i<subParserNames_.size(); ++i)
-        msg +=  ", '"_lv+subParserNames_[i]+"'"_lv;
-     msg += ")"_lv;
+  const String&  value()const{ return value_; }
+  const Strings& possibleChoice()const{ return possibleChoice_; }
 
-     return msg;
-   }
-
-   const Strings& subParserNames()const{ return subParserNames_; }
-
-  private:
-    Strings subParserNames_;
+private:
+  String value_;
+  Strings possibleChoice_;
 };
 //----------------------------------------------------------------------------------
 template <typename CharT>
 class UnrecognizedArgumentsException: public Exception<CharT>
 {
 public:
-  using String= typename CommonException<CharT>::String;
+  using String= typename Exception<CharT>::String;
+  using Strings= StringsT<String>;
 
-  explicit UnrecognizedArgumentsException(const String& str)
+  explicit UnrecognizedArgumentsException(const Strings& values)
     :Exception<CharT>(),
-     value_(str)
+     values_(values)
   {
   }
 
   virtual String what()const override
   {
     using namespace StringUtils::literals;
-    return "Error: unrecognized arguments: '"_lv+value()+"'"_lv;
+    using StringUtils::join;
+    return "unrecognized arguments: "_lv +join(values_,", ",'\'','\'');
   }
 
-  const String& value()const{ return value_; }
+  const Strings& values()const{ return values_; }
 
 private:
-  String value_;
+  Strings values_;
 };
 //----------------------------------------------------------------------------------
 template <typename CharT>
-class ArgumentRequiredException: public CommonException<CharT>
+class ArgumentRequiredException: public Exception<CharT>
 {
 public:
-   using String = typename CommonException<CharT>::String;
-   using ArgInfoPtr = typename CommonException<CharT>::ArgInfoPtr;
+  using typename Exception<CharT>::String;
+  using typename Exception<CharT>::ArgInfoPtr;
 
-  ArgumentRequiredException(const String& value,
-                      ArgInfoPtr arg,
-                      const String& prefixChars)
-    :CommonException<CharT>(value,arg,prefixChars)
+  ArgumentRequiredException(ArgInfoPtr arg)
+    :Exception<CharT>(),
+     arg_(arg)
   {
   }
 
   virtual String what()const override
   {
     using namespace StringUtils::literals;
-    return "Error: the following argument are required:'"_lv+
-            detail::makeUsage(arg().get(),prefixChars())+"'"_lv;
+    return "the following argument are required: '"_lv+
+            arg_->options()+"'"_lv;
   }
+
+  ArgInfoPtr arg()const{ return arg_; };
+
+private:
+  ArgInfoPtr arg_;
 };
 //----------------------------------------------------------------------------------
 template <typename CharT>
-class OutOfRangeException: public CommonException<CharT>
+class ValueException: public Exception<CharT>
 {
 public:
-   using String = typename CommonException<CharT>::String;
-   using ArgInfoPtr = typename CommonException<CharT>::ArgInfoPtr;
+   using typename Exception<CharT>::String;
+   using typename Exception<CharT>::ArgInfoPtr;
+
+   ValueException(const String& value,
+                  ArgInfoPtr arg)
+    :Exception<CharT>(),
+     value_(value),
+     arg_(arg)
+    {
+    }
+
+   virtual String what()const=0;
+
+   const String& value()const{ return value_; };
+   ArgInfoPtr arg()const{ return arg_; };
+
+private:
+   String value_;
+   ArgInfoPtr arg_;
+};
+//----------------------------------------------------------------------------------
+template <typename CharT>
+class OutOfRangeException: public ValueException<CharT>
+{
+public:
+   using typename ValueException<CharT>::String;
+   using typename ValueException<CharT>::ArgInfoPtr;
 
   OutOfRangeException(const String& value,
-                      ArgInfoPtr arg,
-                      const String& prefixChars)
-    :CommonException<CharT>(value,arg,prefixChars)
+                      ArgInfoPtr arg)
+    :ValueException<CharT>(value,arg)
   {
   }
 
@@ -610,25 +685,24 @@ public:
   {
     using namespace StringUtils::literals;
     return
-        "Error: argument '"_lv +
-        detail::makeUsage(arg().get(),prefixChars())+
-        "' value: '"_lv+value()+"' out of range ["_lv+
-        arg()->minValueString()+".."_lv+arg()->maxValueString()+
+        "argument '"_lv +
+        this->arg()->options() +
+        "' value: '"_lv+this->value()+"' out of range ["_lv+
+        this->arg()->minValueString()+".."_lv+this->arg()->maxValueString()+
         "]"_lv;
   }
 };
 //----------------------------------------------------------------------------------
 template <typename CharT>
-class InvalidArgumentException: public CommonException<CharT>
+class InvalidArgumentException: public ValueException<CharT>
 {
 public:
-  using String =     typename CommonException<CharT>::String;
-  using ArgInfoPtr = typename CommonException<CharT>::ArgInfoPtr;
+  using typename ValueException<CharT>::String;
+  using typename ValueException<CharT>::ArgInfoPtr;
 
   InvalidArgumentException(const String& value,
-                           ArgInfoPtr arg,
-                           const String& prefixChars)
-    :CommonException<CharT>(value,arg,prefixChars)
+                           ArgInfoPtr arg)
+    :ValueException<CharT>(value,arg)
   {
   }
 
@@ -636,25 +710,24 @@ public:
   {
      using namespace StringUtils::literals;
      return
-          "Error: argument '"_lv+
-          detail::makeOptions(arg().get())+
-          "': invalid "_lv      +
-          StringUtils::LatinView(arg()->typeName())+
-          " value: '"_lv+value()+"'"_lv;
+          "argument '"_lv+
+          this->arg()->options()+
+          "': invalid "_lv+
+          StringUtils::LatinView(this->arg()->typeName())+
+          " value: '"_lv+this->value()+"'"_lv;
   }
 };
 //----------------------------------------------------------------------------------
 template <typename CharT>
-class LengthErrorException: public CommonException<CharT>
+class LengthErrorException: public ValueException<CharT>
 {
 public:
-  using String = typename CommonException<CharT>::String;
-  using ArgInfoPtr = typename CommonException<CharT>::ArgInfoPtr;
+  using typename ValueException<CharT>::String;
+  using typename ValueException<CharT>::ArgInfoPtr;
 
   LengthErrorException(const String& value,
-                       ArgInfoPtr arg,
-                       const String& prefixChars)
-    :CommonException<CharT>(value,arg,prefixChars)
+                       ArgInfoPtr arg)
+    :ValueException<CharT>(value,arg)
   {
   }
 
@@ -662,11 +735,10 @@ public:
   {
     using namespace StringUtils::literals;
     return
-        "Error: argument '"_lv +
-        detail::makeUsage(arg().get(),prefixChars())+
-        "' value: '"_lv+value()+"' "_lv+
+        "argument '"_lv + this->arg()->options() +
+        "' value: '"_lv + this->value()+"' "_lv+
         "string length out of range ["_lv+
-        arg()->minValueString()+".."_lv+arg()->maxValueString()+
+        this->arg()->minValueString()+".."_lv+this->arg()->maxValueString()+
         "]"_lv;
   }
 };
@@ -678,7 +750,7 @@ class ArgumentParser
 {
 public:
   using String  = std::basic_string<CharT>;
-  using Strings = std::vector<String>;
+  using Strings = StringsT<String>;
   using ArgInfoPtr= std::shared_ptr<ArgInfo<CharT>>;
   using ArgumentParserPtr= std::shared_ptr<ArgumentParser<CharT>>;
 
@@ -695,8 +767,8 @@ public:
   template <typename T, std::size_t minCount, std::size_t maxCount>
   Arg<T, TypeUtils::groupOfMaxCount<T,maxCount,CharT>(), CharT>
     addArgument(const String& shortOption,
-                  const String& longOption=String(),
-                  bool required= false);
+                const String& longOption=String(),
+                bool required= false);
 
   // nargs
   template <typename T, NArgs nargs= NArgs::optional>
@@ -712,18 +784,26 @@ public:
                 const String& longOption=String(),
                 bool required= false);
 
+  void removeAllArguments();
+  void removeSubParsers();
+  void clear(){ removeAllArguments(); removeSubParsers(); }
+
+  void reset();
+  String help(bool recursive= false,std::size_t level=0)const;
+  String usage()const;
+
   void parseArgs(int argc, CharT *argv[]);
   void parseArgs(int argc, const CharT *argv[]);
-
   void parseArgs(const Strings& args);
   void parseCmdLine(const String& str);
 
-  String help()const;
-  String usage()const;
-  void reset();
-
   void setSubParserHelp(const String& help){ help_= help; };
   bool exists() const { return exists_; }
+
+  const String& prefixChars()const{ return prefixChars_; }
+
+  bool argExists(const String& shortOption,
+                 const String& longOption)const;
 
 private:
   template <typename Iter>
@@ -736,7 +816,7 @@ private:
   Iter parseOptional(Iter first,Iter last);
 
   std::shared_ptr<ArgInfo<CharT>>
-     getOptional(std::basic_string_view<CharT> argOption);
+     findOptionalArg(std::basic_string_view<CharT> argOption);
 
   String subParsersUsage()const;
 
@@ -756,7 +836,7 @@ private:
 //------------------------------------------------------------------
 template<typename CharT>
 std::shared_ptr<ArgInfo<CharT>>
-ArgumentParser<CharT>::getOptional(std::basic_string_view<CharT> argOption)
+ArgumentParser<CharT>::findOptionalArg(std::basic_string_view<CharT> argOption)
 {
   auto it = std::find_if(std::begin(optional_), std::end(optional_),
                          [&](auto arg)
@@ -770,13 +850,13 @@ ArgumentParser<CharT>::getOptional(std::basic_string_view<CharT> argOption)
 template<typename CharT>
 template <typename Iter>
 void ArgumentParser<CharT>::assignValues(
-  typename ArgumentParser<CharT>::ArgInfoPtr arg,
+    typename ArgumentParser<CharT>::ArgInfoPtr arg,
     Iter first, Iter last)
 {
   const std::size_t count = std::distance(first,last);
   if(count < arg->minCount() || count > arg->maxCount())
-  {
-    throw WrongCountException<CharT>(*first,arg,prefixChars_);
+  {   
+    throw WrongCountException<CharT>(arg);
   }
 
   if(count==0)
@@ -797,19 +877,19 @@ void ArgumentParser<CharT>::assignValues(
   }
   catch (const std::out_of_range&)
   {
-    throw OutOfRangeException<CharT>(*first,arg,prefixChars_);
+    throw OutOfRangeException<CharT>(*first,arg);
   }
   catch (const std::range_error&)
   {
-    throw OutOfRangeException<CharT>(*first,arg,prefixChars_);
+    throw OutOfRangeException<CharT>(*first,arg);
   }
   catch (const std::length_error&)
   {
-    throw LengthErrorException<CharT>(*first,arg,prefixChars_);
+    throw LengthErrorException<CharT>(*first,arg);
   }
   catch (const std::invalid_argument&)
   {
-   throw InvalidArgumentException<CharT>(*first,arg,prefixChars_);
+   throw InvalidArgumentException<CharT>(*first,arg);
   }
 }
 //------------------------------------------------------------------
@@ -817,33 +897,34 @@ template<typename CharT>
 template<typename Iter>
 Iter ArgumentParser<CharT>::pasrePositional(Iter first, Iter last)
 {
-  std::size_t totalCount= std::distance(first,last);
+  using namespace std;
 
-  for(auto argIt=std::begin(positional_);
-      argIt!=std::end(positional_);
-      ++argIt)
+  size_t totalCount= distance(first,last);
+
+  for(auto argIt=begin(positional_); argIt!=end(positional_); ++argIt)
   {
     (*argIt)->exists_= true;
 
-    const std::size_t shouldRemain=
-        std::accumulate(std::next(argIt), std::end(positional_), 0u,
-                        [](std::size_t sum,auto arg)
-    {
-      return sum + arg->minCount_;
-    });
+    const size_t shouldRemain=
+        accumulate(next(argIt), end(positional_), 0u,
+           [](size_t sum,auto arg){ return sum + arg->minCount_; });
 
-    const std::size_t available = (shouldRemain > totalCount)
+    const size_t available= (shouldRemain > totalCount)
         ? totalCount
         : totalCount-shouldRemain;
 
-    const std::size_t count= std::min((*argIt)->maxCount(),available);
-    auto lastValueOfArgIt= std::next(first,count);
+    const size_t count= std::min((*argIt)->maxCount(),available);
+    auto lastValue= next(first,count);
 
-    assignValues((*argIt),first,lastValueOfArgIt);
+    assignValues((*argIt),first,lastValue);
 
-    first =lastValueOfArgIt;
+    first= lastValue;
     totalCount -= count;
   }
+
+  if(first!=last)
+    throw UnrecognizedArgumentsException<CharT>(Strings(first,last));
+
   return first;
 }
 //------------------------------------------------------------------
@@ -851,33 +932,37 @@ template<typename CharT>
 template<typename Iter>
 Iter ArgumentParser<CharT>::parseOptional(Iter first, Iter last)
 {
+  using namespace std;
+  using namespace std::placeholders;
+  using StringUtils::hasPrefix;
+
   while(first!=last)
   {
-    auto arg = getOptional(*first);
+    auto arg = findOptionalArg(*first);
     if(!arg)
+    {
+      /* throw UnrecognizedArgumentsException<CharT>(Strings(first,last)); */
       return first;
+    }
 
     arg->exists_= true;
-    first= std::next(first);
+    first= next(first);
 
-    auto nextOptionIt=
-        std::find_if(first, last,
-                     std::bind(StringUtils::isOption<String>,
-                               std::placeholders::_1,
-                               prefixChars_));
+    Iter nextOption=
+       find_if(first, last, bind(hasPrefix<String>, _1, prefixChars_));
 
-    const std::size_t count= std::distance(first,nextOptionIt);
-    const std::size_t currentArgCount= std::min(count,arg->maxCount());
-    auto lastValueOfArgIt= std::next(first,currentArgCount);
+    const size_t count= distance(first,nextOption);
+    const size_t currentArgCount= std::min(count,arg->maxCount());
+    Iter lastValue= next(first,currentArgCount);
 
-    assignValues(arg,first,lastValueOfArgIt);
-    first= lastValueOfArgIt;
+    assignValues(arg,first,lastValue);
+    first= lastValue;
   }
 
   for(auto arg:optional_)
   {
     if(arg->required_ && !arg->exists_)
-       throw ArgumentRequiredException<CharT>(*first,arg,prefixChars_);
+       throw ArgumentRequiredException<CharT>(arg);
   }
   return first;
 }
@@ -886,48 +971,56 @@ template<typename CharT>
 template<typename Iter>
 void ArgumentParser<CharT>::parse(Iter first, Iter last)
 {
-  auto endItOfPositional=
-      std::find_if(first,last,
-                   std::bind(StringUtils::isOption<String>,
-                             std::placeholders::_1,
-                             prefixChars_));
+  using namespace std;
+  using namespace std::placeholders;
+  using StringUtils::hasPrefix;
 
-  pasrePositional(first,endItOfPositional);
-  auto it= parseOptional(endItOfPositional,last);
+  // find sub parser
+  auto subParserIt= end(subParsers_);
+  auto endOfMainParser= find_if(first,last,
+      [&](const auto& s)
+      {
+        subParserIt= find_if(begin(subParsers_), end(subParsers_),
+            [&s](auto parser)
+            {
+              return parser->name_== s;
+            });
+        return subParserIt != end(subParsers_);
+      });
 
-  bool invalidChoice= false;
-  if(it!=last)
+  // find end positional-s args
+  auto endOfPositional=
+    find_if(first, endOfMainParser, bind(hasPrefix<String>, _1, prefixChars_));
+
+  pasrePositional(first, endOfPositional);
+  auto it= parseOptional(endOfPositional, endOfMainParser);
+
+  // Problems
+  if(it!=endOfMainParser)
   {
-     if(subParsers_.empty())
-        throw UnrecognizedArgumentsException<CharT>(*it);
+    if(subParsers_.empty())
+    {
+      throw UnrecognizedArgumentsException<CharT>(Strings(it,endOfMainParser));
+    }
+    else
+    {
+      Strings subParsersNames;
+      subParsersNames.reserve(subParsers_.size());
+      transform(begin(subParsers_),
+                end(subParsers_),
+                back_inserter(subParsersNames),
+                [](auto parser){ return parser->name_; });
 
-     auto parserIt=
-        std::find_if(std::begin(subParsers_),std::end(subParsers_),
-                       [&it](auto parser)
-        {
-           return parser->name_== *it;
-        });
-
-     invalidChoice= (parserIt==std::end(subParsers_));
-     if(!invalidChoice)
-     {
-       (*parserIt)->exists_= true;
-       (*parserIt)->parse(std::next(it),last);
-     }
+      throw InvalidChoiceException<CharT>(*it,subParsersNames);
+    }
   }
-  else
+  // sub parser
+  if(endOfMainParser!=last)
   {
-    invalidChoice= !subParsers_.empty();
-  }
+    assert(subParserIt != end(subParsers_));
 
-  if(invalidChoice)
-  {
-     Strings subParsersNames;
-     subParsersNames.reserve(subParsers_.size());
-     for(auto parser: subParsers_)
-       subParsersNames.push_back(parser->name_);
-
-     throw InvalidChoiseException<CharT>(subParsersNames);
+    (*subParserIt)->exists_= true;
+    (*subParserIt)->parse(next(endOfMainParser),last);
   }
 }
 //------------------------------------------------------------------
@@ -952,17 +1045,30 @@ void ArgumentParser<CharT>::parseArgs(const ArgumentParser::Strings &args)
 template<typename CharT>
 void ArgumentParser<CharT>::parseCmdLine(const ArgumentParser::String &str)
 {
-  parseArgs(StringUtils::split(str));
+  parseArgs(StringUtils::split<CharT,Strings>(str));
 }
 //------------------------------------------------------------------
 template <typename CharT>
 typename ArgumentParser<CharT>::ArgumentParserPtr
 ArgumentParser<CharT>::addSubParser(const ArgumentParser::String &name)
 {
-  ArgumentParserPtr parser= new ArgumentParser;
+  ArgumentParserPtr parser(new ArgumentParser);
   parser->name_= name;
   subParsers_.push_back(parser);
   return parser;
+}
+//----------------------------------------------------------------------------
+template<typename CharT>
+void ArgumentParser<CharT>::removeAllArguments()
+{
+  optional_.clear();
+  positional_.clear();
+}
+//----------------------------------------------------------------------------
+template<typename CharT>
+void ArgumentParser<CharT>::removeSubParsers()
+{
+  subParsers_.clear();
 }
 //----------------------------------------------------------------------------
 template<typename CharT>
@@ -973,8 +1079,19 @@ ArgumentParser<CharT>::addArgument(
     const ArgumentParser<CharT>::String & longOption,
     bool required)
 { 
+  using namespace std;
+  using detail::getArgType;
+
   static_assert(TypeUtils::TypeInfo<T>::isRegistred,
-      "Not allowed type for arg!");
+                "Not allowed type for arg!");
+
+  static_assert(minCount<=maxCount,
+               "minCount must be less or equal maxCount!");
+
+  const ArgType argType= getArgType(shortOption, longOption, prefixChars_);
+
+  assert(("Invalid argument!", argType!=ArgType::invalid) );
+  assert(("Arg already exists!", !argExists(shortOption,longOption) ));
 
   constexpr const TypeGroup group=
       TypeUtils::groupOfMaxCount<T,maxCount,CharT>();
@@ -983,12 +1100,12 @@ ArgumentParser<CharT>::addArgument(
       argImplPtr(new ArgImpl<T,group,CharT>(shortOption,longOption,required));
   argImplPtr->minCount_= minCount;
   argImplPtr->maxCount_= maxCount;
+  argImplPtr->argType_= argType;
 
-  if(!StringUtils::isOption(shortOption, prefixChars_) &&
-     !StringUtils::isOption(longOption,  prefixChars_))
-    positional_.push_back(argImplPtr);
-  else
+  if(argType == ArgType::optional)
     optional_.push_back(argImplPtr);
+  else if(argType == ArgType::positional)
+    positional_.push_back(argImplPtr);
 
   return Arg<T,group,CharT>(argImplPtr);
 }
@@ -1001,10 +1118,9 @@ ArgumentParser<CharT>::addArgument(
     const ArgumentParser<CharT>::String& longOption,
     bool required)
 {
+  [[maybe_unused]]
   constexpr const std::size_t maxCount=
-      std::numeric_limits<std::size_t>::max();
-
-  (void)maxCount;
+       std::numeric_limits<std::size_t>::max();
 
   if constexpr(nargs==NArgs::optional)
       return addArgument<T,0,1>(shortOption,longOption,required);
@@ -1018,9 +1134,9 @@ template<typename CharT>
 template <typename T,char nargs>
 Arg<T, TypeUtils::groupOfNArgs<T,nargs,CharT>(), CharT>
 ArgumentParser<CharT>::
-addArgument(const ArgumentParser<CharT>::String& shortOption,
-            const ArgumentParser<CharT>::String& longOption,
-            bool required)
+  addArgument(const ArgumentParser<CharT>::String& shortOption,
+              const ArgumentParser<CharT>::String& longOption,
+              bool required)
 {
   constexpr const std::size_t maxCount=
       std::numeric_limits<std::size_t>::max();
@@ -1041,64 +1157,88 @@ typename ArgumentParser<CharT>::String
 ArgumentParser<CharT>::subParsersUsage() const
 {
   using namespace StringUtils::literals;
-  String params= "{"_lv+(subParsers_.empty()?String():subParsers_[0]->name_);
-  for(std::size_t i=1; i<subParsers_.size(); ++i)
-    params+= ","_lv+subParsers_[i]->name_;
-  params+= "}"_lv;
-  return params;
+  using StringUtils::join;
+
+  return  "{"_lv+
+          join<CharT>(subParsers_,", ",'\'','\'',[](auto p){ return p->name_; })
+          +"}"_lv;
 }
 //---------------------------------------------------------------------------------------
 template<typename CharT>
 typename ArgumentParser<CharT>::String
-ArgumentParser<CharT>::help() const
+ArgumentParser<CharT>::help(bool recursive, std::size_t level) const
 {
+  using namespace std;
   using namespace StringUtils::literals;
 
-  String helpStr = "\npositional arguments:\n"_lv;
-  for(auto arg: positional_)
-    helpStr+= "  "_lv+arg->helpLine()+"\n"_lv;
+  using StringUtils::join;
+  using detail::makeHelpLine;
+
+  auto indent= [](size_t level){ return String(4*level,CharT(' ')); };
+
+  String helpStr;
+  if(!positional_.empty() || !subParsers_.empty())
+  {
+    helpStr+= indent(level)+"positional arguments:\n"_lv;
+    for(auto arg: positional_)
+      helpStr+= indent(level+1)+makeHelpLine(arg,prefixChars_)+"\n"_lv;
+  }
 
   if(!subParsers_.empty())
   {
-    helpStr+= "  "_lv+subParsersUsage()+"\n"_lv;
-    for(std::size_t i=0; i<subParsers_.size(); ++i)
-      if(!subParsers_[i]->help_.empty())
-        helpStr+= "  "_lv+ subParsers_[i]->name_ +" "_lv+
-            "  "_lv+ subParsers_[i]->help_ +"\n"_lv;
+    helpStr+= indent(level+1)+subParsersUsage()+"\n"_lv;
+    for(auto parser: subParsers_)
+    {
+      if(!parser->help_.empty())
+        helpStr+=
+           indent(level+1)+ parser->name_ +" "_lv
+                          + parser->help_ +"\n"_lv;
+      if(recursive)
+        helpStr+= parser->help(recursive,level+2);
+    }
   }
 
-  helpStr += "\noptional arguments:\n"_lv;
-  for(auto arg: optional_)
-    helpStr+= "  "_lv+arg->helpLine()+"\n"_lv;
+  if(!optional_.empty())
+  {
+    helpStr += indent(level)+"optional arguments:\n"_lv;
+    for(auto arg: optional_)
+      helpStr+= indent(level+1)+makeHelpLine(arg,prefixChars_)+"\n"_lv;
+  }
 
   return helpStr;
 }
 //----------------------------------------------------------------------------
 template<typename CharT>
-typename ArgumentParser<CharT>::String ArgumentParser<CharT>::usage() const
+typename ArgumentParser<CharT>::String
+  ArgumentParser<CharT>::usage() const
 {
+  using namespace std;
+  using namespace std::placeholders;
   using namespace StringUtils::literals;
+  using StringUtils::appendJoined;  
+  using detail::makeUsage;
 
   String usageStr;
-  for(std::size_t i=0; i<optional_.size(); ++i)
+
+  if(!optional_.empty())
   {
-    if(i>0)
-      usageStr+= " "_lv;
-    usageStr+= "["_lv+ optional_[i]->shortOption_+" "_lv+
-        optional_[i]->usage()+"]"_lv;
+    appendJoined(usageStr,optional_," ",
+                 bind(makeUsage<CharT>,_1,prefixChars_));
   }
 
-  for(std::size_t i=0; i<positional_.size(); ++i)
+  if(!positional_.empty())
   {
-    if(i>0 || !usageStr.empty())
-      usageStr+= " "_lv;
-    usageStr+= positional_[i]->usage();
+    if(!optional_.empty())
+       usageStr+= " "_lv;
+
+    appendJoined(usageStr,positional_," ",
+                 bind(makeUsage<CharT>,_1,prefixChars_));
   }
 
   if(subParsers_.empty())
     return usageStr;
 
-  if(!usageStr.empty())
+  if(!optional_.empty() || !positional_.empty())
     usageStr+= " "_lv;
 
   usageStr+= subParsersUsage();
@@ -1114,6 +1254,32 @@ void ArgumentParser<CharT>::reset()
     posPtr->reset();
   for(auto parserPtr:subParsers_)
     parserPtr->reset();
+}
+//-----------------------------------------------------------------
+template<typename CharT>
+bool ArgumentParser<CharT>::argExists(
+    const ArgumentParser::String &shortOption,
+    const ArgumentParser::String &longOption) const
+{
+  using namespace std;
+
+  auto isMatched=
+    [&shortOption,&longOption](auto arg)->bool
+    {
+      return
+        (!arg->longOption_.empty()  &&
+           (arg->longOption_==shortOption || arg->longOption_==longOption)) ||
+        (!arg->shortOption_.empty() &&
+           (arg->shortOption_==shortOption || arg->shortOption_==longOption));
+    };
+
+  return
+     find_if(cbegin(positional_),
+             cend(positional_),
+             isMatched)!= cend(positional_) ||
+     find_if(cbegin(optional_),
+             cend(optional_),
+             isMatched) != cend(optional_);
 }
 //----------------------------------------------------------------------------
 }
