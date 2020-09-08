@@ -29,10 +29,10 @@ template <typename T>
 using TypeInfo = TypeUtils::TypeInfo<T>;
 
 template <typename T>
-using SequenceT = std::vector<T>;
+using ValueContainer = std::vector<T>;
 
-template <typename StringT>
-using StringsT= std::vector<StringT>;
+template <typename String>
+using StringContainer= std::vector<String>;
 
 enum class ArgType{ invalid, positional, optional };
 //----------------------------------------------------------------------------
@@ -51,7 +51,7 @@ class ArgInfo
 {
 public:
   using String  = std::basic_string<CharT>;
-  using Strings = StringsT<String>;
+  using Strings = StringContainer<String>;
 
   ArgInfo(const String& shortOption,
           const String& longOption,
@@ -70,14 +70,19 @@ public:
   std::size_t maxCount()const{ return maxCount_; }
   std::size_t minCount()const{ return minCount_; }
 
-  virtual String maxValueString()const=0;
-  virtual String minValueString()const=0;
-
   const String& help()const { return help_;  }
   void setHelp(const String& help){ help_= help; }
 
-  virtual bool exists()const { return exists_; }
-  virtual ArgType argType()const { return argType_; }
+  bool isRequired()const{ return required_; }
+  void setRequired(bool required){ required_= required; }
+
+  bool exists()const { return exists_; }
+  ArgType argType()const { return argType_; }
+
+  // purely virtual
+
+  virtual String maxValueAsString()const=0;
+  virtual String minValueAsString()const=0;
 
   virtual bool hasValue()const= 0;
   virtual void reset()= 0;
@@ -141,7 +146,7 @@ public:
 
   using StorageType =
         std::conditional_t< isSequence,
-                            SequenceT<T>,
+                            ValueContainer<T>,
                             std::optional<T>>;
 
   using ValueType =
@@ -149,7 +154,7 @@ public:
                             T,
                             std::conditional_t< group==TypeGroup::string,
                                                 const T&,
-                                                const SequenceT<T>&
+                                                const ValueContainer<T>&
                                               >
                           >;
 
@@ -190,12 +195,12 @@ public:
   virtual const char* typeName()const override{ return TypeInfo<T>::name; }
   virtual TypeGroup typeGroup()const  override{ return group; }
 
-  virtual String minValueString()const override
+  virtual String minValueAsString()const override
   {
     return StringUtils::toString<CharT>(range_.first);
   }
 
-  virtual String maxValueString()const override
+  virtual String maxValueAsString()const override
   {
     return StringUtils::toString<CharT>(range_.second);
   }
@@ -572,7 +577,7 @@ class InvalidChoiceException: public Exception<CharT>
 {
 public:
   using String= typename Exception<CharT>::String;
-  using Strings= StringsT<String>;
+  using Strings= StringContainer<String>;
   using ArgInfoPtr= typename Exception<CharT>::ArgInfoPtr;
 
   InvalidChoiceException(const String& value,
@@ -606,7 +611,7 @@ class UnrecognizedArgumentsException: public Exception<CharT>
 {
 public:
   using String= typename Exception<CharT>::String;
-  using Strings= StringsT<String>;
+  using Strings= StringContainer<String>;
 
   explicit UnrecognizedArgumentsException(const Strings& values)
     :Exception<CharT>(),
@@ -698,7 +703,7 @@ public:
         "argument '"_lv +
         this->arg()->options() +
         "' value: '"_lv+this->value()+"' out of range ["_lv+
-        this->arg()->minValueString()+".."_lv+this->arg()->maxValueString()+
+        this->arg()->minValueAsString()+".."_lv+this->arg()->maxValueAsString()+
         "]"_lv;
   }
 };
@@ -748,7 +753,7 @@ public:
         "argument '"_lv + this->arg()->options() +
         "' value: '"_lv + this->value()+"' "_lv+
         "string length out of range ["_lv+
-        this->arg()->minValueString()+".."_lv+this->arg()->maxValueString()+
+        this->arg()->minValueAsString()+".."_lv+this->arg()->maxValueAsString()+
         "]"_lv;
   }
 };
@@ -760,7 +765,7 @@ class ArgumentParser
 {
 public:
   using String  = std::basic_string<CharT>;
-  using Strings = StringsT<String>;
+  using Strings = StringContainer<String>;
   using ArgInfoPtr= std::shared_ptr<ArgInfo<CharT>>;
   using ArgumentParserPtr= std::shared_ptr<ArgumentParser<CharT>>;
 
@@ -809,12 +814,13 @@ public:
 
   void setSubParserHelp(const String& help){ help_= help; };
   bool exists() const { return exists_; }
-
-  const String& prefixChars()const{ return prefixChars_; }
-
   bool argExists(const String& shortOption,
                  const String& longOption)const;
 
+  const String& prefixChars()const{ return prefixChars_; }
+  std::vector<ArgInfoPtr>& positional()const {return positional_; }
+  std::vector<ArgInfoPtr>& optional()const   {return optional_; }
+  std::vector<ArgumentParserPtr>& subParsers()const{ return subParsers_;}
 private:
   template <typename Iter>
   void parse(Iter first,Iter last);

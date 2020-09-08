@@ -4,12 +4,18 @@
 //------------------------------------------------------------------
 #include "../../ArgParse/ArgumentParser.h"
 //------------------------------------------------------------------
-#include <Windows.h>
+#define OS_WINDOWS
+
+#ifdef OS_WINDOWS
+   #include <Windows.h>
+#endif
 //------------------------------------------------------------------
 int main(/*int argc, char *argv[]*/)
 {
+#ifdef OS_WINDOWS
   SetConsoleCP(CP_UTF8);
   SetConsoleOutputCP(CP_UTF8);
+#endif
 
   using namespace std;
   using namespace std::literals;
@@ -28,10 +34,10 @@ int main(/*int argc, char *argv[]*/)
   auto p = parser.addArgument<string,2,3>("p");
   p.setMinLength(1);
   p.setMaxLength(2);
-  p.setHelp("- first positional arg");
+  p.setHelp(u8"- позициональный аргумент");
   auto o = parser.addArgument<int,1,1>("-o","--opt");
   o.setRange(5,15);
-  o.setHelp("- first optional arg");
+  o.setHelp(u8"- опциональный аргумент");
   auto subParser1 = parser.addSubParser("cmd1");
   auto subParser2 = parser.addSubParser("cmd2");
 
@@ -57,7 +63,7 @@ int main(/*int argc, char *argv[]*/)
     {
       //  Error: argument 'p': expected values count: 2..3
       cout<< "translated: "
-          <<  u8"Ошибка: аргумент '"   << e.arg()->options()<< "':"
+          <<  u8"аргумент '"   << e.arg()->options()<< "':"
           <<  u8" должен содержать от "<< e.arg()->minCount()
           <<  u8" до " << e.arg()->maxCount() <<  u8" значений."
           << endl;
@@ -68,10 +74,10 @@ int main(/*int argc, char *argv[]*/)
       // Error: argument 'p [p ...]' value:
       // 'abc' string length out of range [0..2]
       cout<< "translated: "
-          <<  u8"Ошибка: строковый аргумент '"
+          <<  u8"строковый аргумент '"
           <<  e.arg()->options()<< "':"
-          <<  u8" должен быть длиной от "<< e.arg()->minValueString()
-          <<  u8" до " << e.arg()->maxValueString()
+          <<  u8" должен быть длиной от "<< e.arg()->minValueAsString()
+          <<  u8" до " << e.arg()->maxValueAsString()
           <<  u8" символов."
           << endl;
       cout<< endl;
@@ -80,7 +86,7 @@ int main(/*int argc, char *argv[]*/)
     {
       // original: Error: argument '-o': invalid int value: 'x'
       cout<< "translated: "
-          <<  u8"Ошибка: аргумент '"
+          <<  u8"аргумент '"
           <<  e.arg()->options()<< "':"
           <<  u8" некорректное значение для типа "
           <<  e.arg()->typeName()
@@ -94,13 +100,13 @@ int main(/*int argc, char *argv[]*/)
     {
       // Error: argument 'o' value: '20' out of range [5..15]
       cout<< "translated: "
-          <<  u8"Ошибка: аргумент '"
+          <<  u8"аргумент '"
           <<  e.arg()->options()<< "':"
           <<  u8" значение: '"
           <<  e.value()
           <<  u8"' выходит за границы ["
-          <<  e.arg()->minValueString() << ".."
-          <<  e.arg()->maxValueString() << "]"
+          <<  e.arg()->minValueAsString() << ".."
+          <<  e.arg()->maxValueAsString() << "]"
           <<  endl;
       cout<< endl;
     }
@@ -108,7 +114,7 @@ int main(/*int argc, char *argv[]*/)
     {
       // Error: unrecognized arguments: 'd'
       cout<< "translated: "
-          <<  u8"Ошибка: непредусмотренные аргументы: "
+          <<  u8"непредусмотренные аргументы: "
           <<  StringUtils::join(e.values(),", ",'\'','\'')
           <<  endl;
       cout<< endl;
@@ -117,7 +123,7 @@ int main(/*int argc, char *argv[]*/)
     {
       // Error: invalid choice: 'cmd' (choose from 'cmd1', 'cmd2')
       cout<<  "translated: "
-          <<  u8"Ошибка: неправильный выбор: '"
+          <<  u8"неправильный выбор: '"
           <<  e.value()
           <<  u8"' (выбирете из "
           <<  StringUtils::join(e.possibleChoice(),", ",'\'','\'')
