@@ -105,14 +105,15 @@ auto strToInt(const std::basic_string<CharT>& s)
 template<typename CharT>
 auto strToUInt(const std::basic_string<CharT>& s)
 {
-  return detail::convert<unsigned long,unsigned int>(s,std::strtoul,std::wcstoul);
+  return
+    detail::convert<unsigned long,unsigned int>(s,std::strtoul,std::wcstoul);
 };
 
 template<typename CharT>
 auto strToLong(const std::basic_string<CharT>& s)
 {
   return
-      detail::convert<long>(s,std::strtol,std::wcstol);
+    detail::convert<long>(s,std::strtol,std::wcstol);
 };
 
 template<typename CharT>
@@ -148,7 +149,8 @@ auto strToDouble(std::basic_string<CharT> s)
 template<typename CharT>
 auto strToLongDouble(const std::basic_string<CharT>& s)
 {
-  return  detail::convert<long double>(s,std::strtold,std::wcstold);
+  return
+     detail::convert<long double>(s,std::strtold,std::wcstold);
 };
 //----------------------------------------------------------------------------
 template <typename CharT,typename Number>
@@ -221,26 +223,32 @@ void joinAlg(Iter first, Iter last,
              D delemiter,
              Q leftQuote,
              Q rightQuote,
-             F f)
+             F f,
+             bool skipEmptyParts= true)
 {
  using namespace std;
 
  if(first==last)
    return;
 
- *out++ = leftQuote;
  const auto tmp = f(*first);
- copy(begin(tmp),end(tmp),out);
- *out++ = rightQuote;
+ if(!empty(tmp) || !skipEmptyParts)
+ {
+   *out++ = leftQuote;
+   copy(begin(tmp),end(tmp),out);
+   *out++ = rightQuote;
+ }
 
  for(++first; first!=last; ++first)
  {
-   copy(strBegin(delemiter),strEnd(delemiter),out);
-
-   *out++ = leftQuote;
    const auto tmp = f(*first);
-   copy(begin(tmp),end(tmp),out);
-   *out++ = rightQuote;
+   if(!empty(tmp) || !skipEmptyParts)
+   {
+     copy(strBegin(delemiter),strEnd(delemiter),out);
+     *out++ = leftQuote;
+     copy(begin(tmp),end(tmp),out);
+     *out++ = rightQuote;
+   }
  }
 }
 //----------------------------------------------------------------------------
@@ -251,21 +259,27 @@ template <typename Iter,
 void joinAlg(Iter first, Iter last,
              OutIter out,
              D delemiter,
-             F f)
+             F f,
+             bool skipEmptyParts= true)
 {
  using namespace std;
 
  if(first==last)
    return;
 
+
  const auto tmp = f(*first);
- copy(begin(tmp),end(tmp),out);
+ if(!empty(tmp) || !skipEmptyParts)
+   copy(begin(tmp),end(tmp),out);
 
  for(++first; first!=last; ++first)
  {
-   copy(strBegin(delemiter),strEnd(delemiter),out);
    const auto tmp = f(*first);
-   copy(begin(tmp),end(tmp),out);
+   if(!empty(tmp) || !skipEmptyParts)
+   {
+     copy(strBegin(delemiter),strEnd(delemiter),out);
+     copy(begin(tmp),end(tmp),out);
+   }
  }
 }
 //----------------------------------------------------------------------------
@@ -277,24 +291,54 @@ void joinAlg(Iter first, Iter last,
              OutIter out,
              D delemiter,
              Q leftQuote,
-             Q rightQuote)
+             Q rightQuote,
+             bool skipEmptyParts= true)
 {
   using namespace std;
 
   if(first==last)
     return;
 
-  *out++ = leftQuote;
-  copy(begin(*first),end(*first),out);
-  *out++ = rightQuote;
-
-  for(++first; first!=last; ++first)
+  if(!empty(*first) || !skipEmptyParts)
   {
-    copy(strBegin(delemiter),strEnd(delemiter),out);
-
     *out++ = leftQuote;
     copy(begin(*first),end(*first),out);
     *out++ = rightQuote;
+  }
+
+  for(++first; first!=last; ++first)
+  {
+    if(!empty(*first) || !skipEmptyParts)
+    {
+      copy(strBegin(delemiter),strEnd(delemiter),out);
+      *out++ = leftQuote;
+      copy(begin(*first),end(*first),out);
+      *out++ = rightQuote;
+    }
+  }
+}
+//----------------------------------------------------------------------------
+template <typename Iter,
+          typename OutIter,
+          typename D>
+void joinAlg(Iter first, Iter last, OutIter out, D delemiter,
+             bool skipEmptyParts= true)
+{
+  using namespace std;
+
+  if(first==last)
+    return;
+
+  if(!empty(*first) || !skipEmptyParts)
+    copy(begin(*first),end(*first),out);
+
+  for(++first; first!=last; ++first)
+  {
+    if(!empty(*first) || !skipEmptyParts)
+    {
+      copy(strBegin(delemiter),strEnd(delemiter),out);
+      copy(begin(*first),end(*first),out);
+    }
   }
 }
 //----------------------------------------------------------------------------
@@ -306,7 +350,8 @@ void appendJoined(String& out,
                   const Strings& strings,
                   D delemiter,
                   Q leftQuote,
-                  Q rightQuote)
+                  Q rightQuote,
+                  bool skipEmptyParts= true)
 {
   using namespace std;
 
@@ -323,7 +368,34 @@ void appendJoined(String& out,
   joinAlg(cbegin(strings),cend(strings),
           back_inserter(out),
           delemiter,
-          leftQuote, rightQuote);
+          leftQuote, rightQuote,
+          skipEmptyParts);
+}
+//----------------------------------------------------------------------------
+template <typename String,
+          typename Strings,
+          typename D>
+void appendJoined(String& out,
+                  const Strings& strings,
+                  D delemiter,
+                  bool skipEmptyParts= true)
+{
+  using namespace std;
+
+  const size_t totalSize =
+    accumulate(begin(strings),
+               end(strings),
+               (size(strings)-1)+strLength(delemiter)+2,
+               [](size_t l,const auto& r)
+               {
+                 return l+size(r);
+               });
+  out.reserve(out.size()+totalSize);
+
+  joinAlg(cbegin(strings),cend(strings),
+          back_inserter(out),
+          delemiter,
+          skipEmptyParts);
 }
 //----------------------------------------------------------------------------
 template <typename String,
@@ -336,14 +408,16 @@ void appendJoined(String& out,
                   D delemiter,
                   Q leftQuote,
                   Q rightQuote,
-                  F f)
+                  F f,
+                  bool skipEmptyParts= true)
 {
   using namespace std;
   joinAlg(cbegin(container),cend(container),
           back_inserter(out),
           delemiter,
           leftQuote, rightQuote,
-          f);
+          f,
+          skipEmptyParts);
 }
 //----------------------------------------------------------------------------
 template <typename String,
@@ -353,13 +427,15 @@ template <typename String,
 void appendJoined(String& out,
                   const Container& container,
                   D delemiter,
-                  F f)
+                  F f,
+                  bool skipEmptyParts= true)
 {
   using namespace std;
   joinAlg(cbegin(container),cend(container),
           back_inserter(out),
           delemiter,
-          f);
+          f,
+          skipEmptyParts);
 }
 //----------------------------------------------------------------------------
 template <typename Strings,
@@ -368,10 +444,20 @@ template <typename Strings,
 auto join(const Strings& strings,
           D delemiter,
           Q leftQuote,
-          Q rightQuote)
+          Q rightQuote,
+          bool skipEmptyParts= true)
 {
   typename Strings::value_type out;
-  appendJoined(out,strings,delemiter,leftQuote,rightQuote);
+  appendJoined(out,strings,delemiter,leftQuote,rightQuote,skipEmptyParts);
+  return out;
+}
+//----------------------------------------------------------------------------
+template <typename Strings, typename D>
+auto join(const Strings& strings,D delemiter,
+          bool skipEmptyParts= true)
+{
+  typename Strings::value_type out;
+  appendJoined(out,strings,delemiter,skipEmptyParts);
   return out;
 }
 //----------------------------------------------------------------------------
@@ -384,10 +470,11 @@ auto join(const Container& container,
           D delemiter,
           Q leftQuote,
           Q rightQuote,
-          F f)
+          F f,
+          bool skipEmptyParts= true)
 {
   std::basic_string<CharT> out;
-  appendJoined(out,container,delemiter,leftQuote,rightQuote,f);
+  appendJoined(out,container,delemiter,leftQuote,rightQuote,f,skipEmptyParts);
   return out;
 }
 //----------------------------------------------------------------------------
@@ -397,10 +484,11 @@ template <typename CharT,
           typename F>
 auto join(const Container& container,
           D delemiter,
-          F f)
+          F f,
+          bool skipEmptyParts= true)
 {
   std::basic_string<CharT> out;
-  appendJoined(out,container,delemiter,f);
+  appendJoined(out,container,delemiter,f,skipEmptyParts);
   return out;
 }
 //----------------------------------------------------------------------------
@@ -411,7 +499,7 @@ auto repeatString(const String& str,
                   D delemiter= LatinView(" "))
 {
    String out;
-   out.reserve( (count-1)*(size(str)+size(delemiter))
+   out.reserve((count-1)*(size(str)+size(delemiter))
                 +count>maxCount?3:0);
    out= str;
 

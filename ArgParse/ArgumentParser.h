@@ -81,15 +81,15 @@ public:
 
   // purely virtual
 
-  virtual String maxValueAsString()const=0;
-  virtual String minValueAsString()const=0;
+  virtual String maxValueAsString()const= 0;
+  virtual String minValueAsString()const= 0;
 
   virtual bool hasValue()const= 0;
   virtual void reset()= 0;
 
   virtual std::size_t typeId()const= 0;
   virtual const char* typeName()const= 0;
-  virtual TypeGroup typeGroup()const=0;
+  virtual TypeGroup typeGroup()const= 0;
 
 protected:
   friend ArgumentParser<CharT>;
@@ -106,7 +106,7 @@ protected:
 
   ArgType argType_ = ArgType::invalid;
 
-  virtual void assingOrAppendFromString(const String& str)=0;
+  virtual void assingOrAppendFromString(const String& str)= 0;
 };
 //---------------------------------------------------------------------------------------
 template<typename CharT>
@@ -182,7 +182,7 @@ public:
 
   virtual void reset() override
   {
-    this->exists_ = false;
+    this->exists_= false;
     if constexpr(isSequence)
       storage_.clear();
     else
@@ -191,7 +191,7 @@ public:
 
   virtual void assingOrAppendFromString(const String& str)override;
 
-  virtual std::size_t typeId() const  override{ return TypeInfo<T>::id; }
+  virtual std::size_t typeId()const   override{ return TypeInfo<T>::id; }
   virtual const char* typeName()const override{ return TypeInfo<T>::name; }
   virtual TypeGroup typeGroup()const  override{ return group; }
 
@@ -239,7 +239,7 @@ void ArgImpl<T, group, CharT>::
   }
 
   if constexpr(group==TypeGroup::number || group==TypeGroup::string)
-    this->storage_ = value;
+    this->storage_= value;
   else
     this->storage_.push_back(value);
 }
@@ -452,16 +452,22 @@ auto optionNameWithoutPrefix(const std::shared_ptr<ArgInfo<CharT>>& arg,
 {
   using namespace std;
   using String = std::basic_string<CharT>;
-  String name= arg->longOption().empty()? arg->shortOption()
-                                        : arg->longOption();
-  auto it = find_if_not(begin(name),
-                        next(begin(name),
-                        std::min(2u,name.size())),
-                        [&prefixChars](CharT c)
-  {
-     return prefixChars.find(c)!= String::npos;
-  });
-  name.erase(begin(name),it);
+
+  auto prefixEnd= [](const String& s,const String& prefixChars)
+    {
+      return
+        find_if_not(begin(s),next(begin(s),std::min(2u,size(s))),
+           [&prefixChars](CharT c){return prefixChars.find(c)!= String::npos;});
+    };
+
+  auto it1 = prefixEnd(arg->shortOption(),prefixChars);
+  auto it2 = prefixEnd(arg->longOption(),prefixChars);
+
+  String name =
+    distance(begin(arg->shortOption()),it1) > distance(begin(arg->longOption()),it2)
+       ? String(it1,end(arg->shortOption()))
+       : String(it2,end(arg->longOption()));
+
   if(arg->argType()==ArgType::optional)
     transform(begin(name),end(name),begin(name),toupper);
   return name;
@@ -1176,7 +1182,7 @@ ArgumentParser<CharT>::subParsersUsage() const
   using StringUtils::join;
 
   return  "{"_lv+
-          join<CharT>(subParsers_,", ",'\'','\'',[](auto p){ return p->name_; })
+          join<CharT>(subParsers_,", ",'\'','\'',[](const auto& p){return p->name_;})
           +"}"_lv;
 }
 //---------------------------------------------------------------------------------------
