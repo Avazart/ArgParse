@@ -31,11 +31,11 @@ int main(/*int argc, char *argv[]*/)
   };
 
   ArgParse::ArgumentParser<char> parser;
-  auto p = parser.addArgument<string,2,3>("p");
+  auto p = parser.addPositional<string,2,3>("p");
   p.setMinLength(1);
   p.setMaxLength(2);
   p.setHelp(u8"- позициональный аргумент");
-  auto o = parser.addArgument<int,1,1>("-o","--opt");
+  auto o = parser.addOptional<int,1,1>("-o","--opt");
   o.setRange(5,15);
   o.setHelp(u8"- опциональный аргумент");
   auto subParser1 = parser.addSubParser("cmd1");
@@ -63,7 +63,7 @@ int main(/*int argc, char *argv[]*/)
     {
       //  Error: argument 'p': expected values count: 2..3
       cout<< "translated: "
-          <<  u8"аргумент '"   << e.arg()->options()<< "':"
+          <<  u8"аргумент '" << StringUtils::join(e.arg()->optionStrings(),"/")<< "':"
           <<  u8" должен содержать от "<< e.arg()->minCount()
           <<  u8" до " << e.arg()->maxCount() <<  u8" значений."
           << endl;
@@ -75,7 +75,7 @@ int main(/*int argc, char *argv[]*/)
       // 'abc' string length out of range [0..2]
       cout<< "translated: "
           <<  u8"строковый аргумент '"
-          <<  e.arg()->options()<< "':"
+          <<  StringUtils::join(e.arg()->optionStrings(),"/")<< "':"
           <<  u8" должен быть длиной от "<< e.arg()->minValueAsString()
           <<  u8" до " << e.arg()->maxValueAsString()
           <<  u8" символов."
@@ -87,7 +87,7 @@ int main(/*int argc, char *argv[]*/)
       // original: Error: argument '-o': invalid int value: 'x'
       cout<< "translated: "
           <<  u8"аргумент '"
-          <<  e.arg()->options()<< "':"
+          <<  StringUtils::join(e.arg()->optionStrings(),"/")<< "':"
           <<  u8" некорректное значение для типа "
           <<  e.arg()->typeName()
           <<  ": '"
@@ -101,7 +101,7 @@ int main(/*int argc, char *argv[]*/)
       // Error: argument 'o' value: '20' out of range [5..15]
       cout<< "translated: "
           <<  u8"аргумент '"
-          <<  e.arg()->options()<< "':"
+          <<  StringUtils::join(e.arg()->optionStrings(),"/")<< "':"
           <<  u8" значение: '"
           <<  e.value()
           <<  u8"' выходит за границы ["

@@ -15,17 +15,18 @@ int main(/*int argc, char *argv[]*/)
   {
     //  optional arg expected one or more values ('+')
     //  required= false
-    auto sumValues = parser.addArgument<float,'+'>("-s", "--sum",  false);
-    auto multValues= parser.addArgument<float,'+'>("-m", "--mult", false);
+    auto sumValues = parser.addOptional<float,'+'>("-s","--sum","/s");
+    // default: sumValues.setRequired(fasle);
+    auto multValues= parser.addOptional<float,'+'>("-m","--mult","/m");
 
-    parser.parseCmdLine("-m 2 4.5 --sum 3.1 2.4");
+    parser.parseCmdLine("/m 2 4.5 --sum 3.1 2.4");
     //  Or use:
     //  parser.parseArgs(argc,argv);
 
     if(sumValues.exists())
     {
-      const float sum= accumulate(begin(*sumValues),
-                                  end(*sumValues),
+      const float sum= accumulate(begin(sumValues.values()),
+                                  end(sumValues.values()),
                                   0.f);
       cout << "sum= " << sum << endl;
     }
@@ -33,7 +34,7 @@ int main(/*int argc, char *argv[]*/)
     if(multValues.exists())
     {
       const float mult=
-          accumulate(begin(*multValues),
+          accumulate(begin(*multValues), // or begin(multValues.values()),
                      end(*multValues),
                      1.f,
                      multiplies<float>());
@@ -43,9 +44,9 @@ int main(/*int argc, char *argv[]*/)
   }
   catch (const ArgParse::Exception<char>& e)
   {
-     cerr<< e.what()  << endl<< endl;
+     cerr<< "Error: " << e.what()       << endl << endl;
      cerr<< "Usage: " << parser.usage() << endl;
-     cerr<< parser.help() << endl;
+     cerr<< "Help:\n" << parser.help()  << endl;
   }
   return 0;
 }

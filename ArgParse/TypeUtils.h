@@ -9,9 +9,6 @@
 namespace ArgParse::TypeUtils
 {
 //----------------------------------------------------------------
-template<typename T,typename CharT>
-constexpr bool IsBasicStringV= std::is_same_v<T,std::basic_string<CharT>>;
-//----------------------------------------------------------------
 template<typename T>
 struct TypeInfo
 {
@@ -40,10 +37,10 @@ struct TypeCounter<0>
     template <>  \
     struct TypeInfo<TYPE> \
     {\
-       template <typename CharT> \
-       static TYPE assignFromString(const std::basic_string<CharT>& s) \
+       template <typename String> \
+       static TYPE assignFromString(String&& s) \
        { \
-         return (ASSIGN_FROM_STRING)(s); \
+         return (ASSIGN_FROM_STRING)(std::forward<String>(s)); \
        } \
        static constexpr const char * name = TYPE_NAME; \
        static constexpr const bool isRegistred = true; \
@@ -73,6 +70,10 @@ TI_REGISTER_TYPE(std::wstring, "wstring", [](auto s){ return s; } );
 enum class Group { number, numbers, string, strings };
 enum class NArgs{ optional, zeroOrMore, oneOrMore  };
 //----------------------------------------------------------------
+template<typename T,typename CharT>
+[[maybe_unused]] constexpr bool IsBasicStringV=
+    std::is_same_v<T,std::basic_string<CharT>>;
+//----------------------------------------------------------------
 template<typename T,std::size_t maxCount,typename CharT=char>
 constexpr Group groupOfMaxCount()
 {
@@ -96,15 +97,6 @@ constexpr Group groupOfNArgs()
            ? (IsBasicStringV<T,CharT> ?Group::strings :Group::numbers)
            : (IsBasicStringV<T,CharT> ?Group::string  :Group::number);
 };
-//----------------------------------------------------------------
-template<typename T, typename = std::void_t<> >
-struct HasValueType: std::false_type{};
-
-template<typename T>
-struct HasValueType<T,std::void_t<typename T::value_type>>: std::true_type{};
-
-template<typename T>
-inline constexpr bool HasValueTypeV= HasValueType<T>::value;
 //----------------------------------------------------------------------------
 template<typename T,typename CharT, bool = IsBasicStringV<T,CharT>>
 struct RangeType

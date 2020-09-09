@@ -267,7 +267,6 @@ void joinAlg(Iter first, Iter last,
  if(first==last)
    return;
 
-
  const auto tmp = f(*first);
  if(!empty(tmp) || !skipEmptyParts)
    copy(begin(tmp),end(tmp),out);
@@ -399,7 +398,7 @@ void appendJoined(String& out,
 }
 //----------------------------------------------------------------------------
 template <typename String,
-          typename Container,
+          typename Container, /* necessarily */
           typename D,
           typename Q,
           typename F>
@@ -420,7 +419,7 @@ void appendJoined(String& out,
           skipEmptyParts);
 }
 //----------------------------------------------------------------------------
-template <typename String,
+template <typename String, /* necessarily */
           typename Container,
           typename D,
           typename F>
@@ -461,7 +460,7 @@ auto join(const Strings& strings,D delemiter,
   return out;
 }
 //----------------------------------------------------------------------------
-template <typename CharT,
+template <typename String, /* necessarily */
           typename Container,
           typename D,
           typename Q,
@@ -473,12 +472,12 @@ auto join(const Container& container,
           F f,
           bool skipEmptyParts= true)
 {
-  std::basic_string<CharT> out;
+  String out;
   appendJoined(out,container,delemiter,leftQuote,rightQuote,f,skipEmptyParts);
   return out;
 }
 //----------------------------------------------------------------------------
-template <typename CharT,
+template <typename String, /* necessarily */
           typename Container,
           typename D,
           typename F>
@@ -487,7 +486,7 @@ auto join(const Container& container,
           F f,
           bool skipEmptyParts= true)
 {
-  std::basic_string<CharT> out;
+  String out;
   appendJoined(out,container,delemiter,f,skipEmptyParts);
   return out;
 }

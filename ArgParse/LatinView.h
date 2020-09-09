@@ -62,7 +62,6 @@ public:
   LatinView(const char* s, std::size_t count)
     :std::string_view(s,count){};
 
-
   LatinView(const LatinView& other)
     :std::string_view(other){};
 

@@ -14,8 +14,8 @@ int main(/*int argc, char *argv[]*/)
     // First positional arg expected one or more values(minCount=1,maxCount=max)
     ArgParse::StringArg<'+'>
         inputFiles =
-           parser.addArgument<string,
-                              ArgParse::NArgs::oneOrMore>("input_files");
+           parser.addPositional<string,
+                               ArgParse::NArgs::oneOrMore>("input_files");
 
     // '+' is analog NArgs::oneOrMore
     // '*' is analog NArgs::zeroOrMore
@@ -23,7 +23,7 @@ int main(/*int argc, char *argv[]*/)
 
     // Second positional arg expected one value(minCount=1,maxCount=1)
     // You can use auto
-    auto outFile = parser.addArgument<string,1,1>("out_file");
+    auto outFile = parser.addPositional<string,1,1>("out_file");
 
     parser.parseCmdLine("\"C:\\Program Files\\in1.txt\"  "
                         "\"C:\\Program Files\\in2.txt\"  "
@@ -44,9 +44,9 @@ int main(/*int argc, char *argv[]*/)
   }
   catch (const ArgParse::Exception<char>& e)
   {
-     cerr << e.what()  << endl<< endl;
+     cerr << "Error: " << e.what()       << endl<< endl;
      cerr << "Usage: " << parser.usage() << endl;
-     cerr << parser.help() << endl;
+     cerr << "Help:\n" << parser.help()  << endl;
   }
   return 0;
 }
