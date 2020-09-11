@@ -165,11 +165,23 @@ TEST(common,Exceptions)
 
   ASSERT_THROW(parser.parseCmdLine("ab --c"),
                UnrecognizedArgumentsException<char>);
-  parser.clear();
 
+  parser.removeAllArguments();
 
+  // Optional
 
-  //
+  parser.addOptional<int>("-x","--y");
+  // already added
+  ASSERT_THROW(parser.addOptional<int>("--y","-z"),
+               ArgumentException<char>);
+
+  ASSERT_THROW(parser.addOptional<int>("-z", "-x"),
+               ArgumentException<char>);
+
+  // wrong prefix
+  ASSERT_THROW(parser.addOptional<int>("--k","withoutPrefix"),
+               ArgumentException<char>);
+
   // Invalid chose
 }
 

@@ -71,6 +71,7 @@ public:
   std::size_t minCount()const{ return minCount_; }
 
   bool exists()const { return exists_; }
+
   // purely virtual
 
   virtual String valueAsString()const= 0;
@@ -85,6 +86,9 @@ public:
   virtual TypeGroup typeGroup()const= 0;
 
 protected:
+  virtual void assingOrAppendFromString(const String& str)= 0;
+
+protected:
   friend ArgumentParser<CharT>;
 
   ArgType argType_= ArgType::invalid;
@@ -97,8 +101,6 @@ protected:
   std::size_t minCount_= 0;
   std::size_t maxCount_= std::numeric_limits<std::size_t>::max();
   bool exists_ = false;
-
-  virtual void assingOrAppendFromString(const String& str)= 0;
 };
 //---------------------------------------------------------------------------------------
 template<typename CharT>
@@ -417,31 +419,6 @@ using StringArg = ArgT<std::basic_string<CharT>, nargs, CharT>;
 namespace detail
 {
 //----------------------------------------------------------------
-template<typename CharT>
-ArgType getArgType(const std::basic_string<CharT>& shortOption,
-                   const std::basic_string<CharT>& longOption,
-                   const std::basic_string<CharT>& prefixChars)
-{
-  using namespace std;
-  using StringUtils::hasPrefix;
-
-  if(shortOption.empty() && longOption.empty())
-    return ArgType::invalid;
-
-  const bool shortHasPrefix= hasPrefix(shortOption, prefixChars);
-  const bool longHasPrefix = hasPrefix(longOption, prefixChars);
-
-  if(!shortHasPrefix && !longHasPrefix)
-     return ArgType::positional;
-
-  if((shortHasPrefix      && longHasPrefix) ||
-     (shortOption.empty() && longHasPrefix) ||
-     (shortHasPrefix      && longOption.empty()))
-     return ArgType::optional;
-
-  return ArgType::invalid;
-}
-//----------------------------------------------------------------
 template<typename String>
 auto optionName(const StringContainer<String>& optionStrings,
                 const String& prefixChars)
@@ -531,9 +508,37 @@ class Exception
 {
 public:
    using String = std::basic_string<CharT>;
+   using Strings = StringContainer<String>;
    using ArgInfoPtr = std::shared_ptr<ArgInfo<CharT>>;
 
    virtual String what()const=0;
+};
+//----------------------------------------------------------------------------------
+template <typename CharT>
+class ArgumentException: public Exception<CharT>
+{
+public:
+   using typename Exception<CharT>::String;
+   using typename Exception<CharT>::Strings;
+
+   ArgumentException(const String& optionString,
+                     const String& message)
+     :Exception<CharT>(),
+      optionString_(optionString),
+      message_(message)
+   {};
+
+   virtual String what()const override
+   {
+     using namespace StringUtils::literals;
+     using StringUtils::join;
+     return "Argument '"_lv+optionString_+"': "_lv+message_;
+   };
+
+   const String& optionString()const{ return optionString_; }
+private:
+   String message_;
+   String optionString_;
 };
 //----------------------------------------------------------------------------------
 template <typename CharT>
@@ -1110,15 +1115,12 @@ ArgumentParser<CharT>::
    addPositional(const ArgumentParser<CharT>::String & name)
 { 
   using namespace std;
-  using detail::getArgType;
 
   static_assert(TypeUtils::TypeInfo<T>::isRegistred,
                 "Not allowed type for arg!");
 
   static_assert(minCount<=maxCount,
                "minCount must be less or equal maxCount!");
-
-  // assert(("Arg already exists!", !argExists(shortOption,longOption) ));
 
   constexpr const TypeGroup group=
       TypeUtils::groupOfMaxCount<T,maxCount,CharT>();
@@ -1145,8 +1147,7 @@ ArgumentParser<CharT>::
      addOptional(OptionStrings&& ... optionStrings)
 {
   using namespace std;
-  using detail::getArgType;
-  using detail::optionName;
+  using namespace StringUtils::literals;
 
   static_assert(TypeUtils::TypeInfo<T>::isRegistred,
                 "Not allowed type for arg!");
@@ -1157,7 +1158,19 @@ ArgumentParser<CharT>::
   static_assert(sizeof...(optionStrings)>0,
                 "arg must have option strings!");
 
-//  assert(("Arg already exists!",findOptionalArg());
+  Strings optionStrings_;
+  (optionStrings_.push_back(std::forward<OptionStrings>(optionStrings)), ...);
+
+  for(const String& optionString:optionStrings_)
+  {
+    if(!StringUtils::hasPrefix(optionString,prefixChars_))
+      throw ArgumentException<CharT>(optionString,
+          " has wrong prefix!"_lv);
+
+    if(findOptionalArg(optionString)!=nullptr)
+      throw ArgumentException<CharT>(optionString,
+          " has already been added to the parser!"_lv);
+  }
 
   constexpr const TypeGroup group=
       TypeUtils::groupOfMaxCount<T,maxCount,CharT>();
@@ -1167,9 +1180,9 @@ ArgumentParser<CharT>::
   argImplPtr->minCount_= minCount;
   argImplPtr->maxCount_= maxCount;
   argImplPtr->argType_=  ArgType::optional;
-  (argImplPtr->optionStrings_.push_back(std::forward<OptionStrings>(optionStrings)), ...);
-
-  argImplPtr->name_= optionName(argImplPtr->optionStrings(),prefixChars_);
+  argImplPtr->optionStrings_ = optionStrings_;
+  argImplPtr->name_=
+      detail::optionName(optionStrings_,prefixChars_);
 
   assert(("Invalid argument!",!argImplPtr->name().empty()));
 
