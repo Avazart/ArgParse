@@ -182,7 +182,7 @@ public:
     if constexpr(group==TypeGroup::number)
       return toString<CharT>(storage());
     else if constexpr(group==TypeGroup::numbers)
-      return join<String>(storage_,", ",toString<CharT,T>,false);
+      return joinF<String>(storage_,", ",toString<CharT,T>,false);
     else if constexpr(group==TypeGroup::strings)
       return join(storage(),", ",'\"','\"',false);
     else
@@ -467,7 +467,8 @@ auto optionName(const StringContainer<String>& optionStrings,
     if(d==2)
        name = String(it,end(s));
   }
-  transform(begin(name),end(name),begin(name),toupper);
+  transform(begin(name),end(name),begin(name),
+            [](auto c){ return toupper(c);});
   return name;
 }
 //----------------------------------------------------------------
@@ -476,7 +477,6 @@ auto makeUsage(const std::shared_ptr<ArgInfo<CharT>>& arg)
 {
   using namespace StringUtils::literals;
   using StringUtils::repeatString;
-  using StringUtils::join;
 
   if(arg->argType()==ArgType::optional)
   {
@@ -500,7 +500,7 @@ auto makeHelpLine(const std::shared_ptr<ArgInfo<CharT>>& arg)
   using namespace StringUtils::literals;
   using String = std::basic_string<CharT>;
   using StringUtils::repeatString;
-  using StringUtils::appendJoined;
+  using StringUtils::appendJoinedF;
 
   String helpLine;
   if(arg->argType()==ArgType::positional)
@@ -509,7 +509,7 @@ auto makeHelpLine(const std::shared_ptr<ArgInfo<CharT>>& arg)
   }
   else if(arg->argType()==ArgType::optional)
   {
-    appendJoined(helpLine, arg->optionStrings(),", ",
+    appendJoinedF(helpLine, arg->optionStrings(),", ",
       [arg](const auto& optionString)
        {
          return optionString+" "_lv+
@@ -552,7 +552,6 @@ public:
   virtual String what()const override
   {
     using namespace StringUtils::literals;
-    using StringUtils::join;
     String msg=
         "argument '"_lv+ this->arg()->fullName()+
         "': expected values count: "_lv+
@@ -1261,10 +1260,10 @@ typename ArgumentParser<CharT>::String
 ArgumentParser<CharT>::subParsersUsage() const
 {
   using namespace StringUtils::literals;
-  using StringUtils::join;
+  using StringUtils::joinF;
 
   return  "{"_lv+
-          join<String>(subParsers_,", ",'\'','\'',[](const auto& p){return p->name_;})
+          joinF<String>(subParsers_,", ",'\'','\'',[](const auto& p){return p->name_;})
           +"}"_lv;
 }
 //---------------------------------------------------------------------------------------
@@ -1321,14 +1320,15 @@ typename ArgumentParser<CharT>::String
   using namespace std;
   using namespace std::placeholders;
   using namespace StringUtils::literals;
-  using StringUtils::appendJoined;  
+  using StringUtils::appendJoinedF;
   using detail::makeUsage;
 
   String usageStr;
 
   if(!optionals_.empty())
   {
-    appendJoined(usageStr,optionals_," ",makeUsage<CharT>);
+     appendJoinedF(usageStr,optionals_," ",
+                   [](const auto& a){ return makeUsage<CharT>(a);});
   }
 
   if(!positionals_.empty())
@@ -1336,7 +1336,8 @@ typename ArgumentParser<CharT>::String
     if(!optionals_.empty())
        usageStr+= " "_lv;
 
-    appendJoined(usageStr,positionals_," ",makeUsage<CharT>);
+     appendJoinedF(usageStr,positionals_," ",
+                   [](const auto& a){ return makeUsage<CharT>(a);});
   }
 
   if(subParsers_.empty())

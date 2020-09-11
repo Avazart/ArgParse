@@ -52,9 +52,9 @@ TEST(StringUtils, strToUInt)
   ASSERT_LT(sizeof(int),sizeof(long long));
 
   ASSERT_EQ(strToUInt<char>("10"), 10);
-  ASSERT_THROW(strToUInt<char>("-10"),std::out_of_range);
-  ASSERT_THROW(strToUInt<char>("abc"),       std::invalid_argument);
-  ASSERT_THROW(strToUInt<char>("10abc"),     std::invalid_argument);
+  ASSERT_THROW(strToUInt<char>("-10"),   std::out_of_range);
+  ASSERT_THROW(strToUInt<char>("abc"),   std::invalid_argument);
+  ASSERT_THROW(strToUInt<char>("10abc"), std::invalid_argument);
 
   const long long maxUInt = std::numeric_limits<unsigned int>::max();
   const long long lowestUInt= std::numeric_limits<unsigned int>::lowest();

@@ -176,11 +176,11 @@ Strings split(const std::basic_string<CharT> &str)
   bool quoted= false;
 
   auto first=
-    find_if_not(begin(str),end(str),isspace);
+    find_if_not(cbegin(str),cend(str),[](auto c){return isspace(c);});
 
   while(true)
   {
-    if(first==end(str))
+    if(first==cend(str))
     {
       if(!current.empty())
         result.push_back(current);
@@ -190,7 +190,7 @@ Strings split(const std::basic_string<CharT> &str)
     {
       result.push_back(current);
       current.clear();
-      first= find_if_not(first, end(str), isspace);
+      first= find_if_not(first, cend(str),[](auto c){return isspace(c);});
       continue;
     }
     else
@@ -218,7 +218,7 @@ template <typename Iter,
           typename D,
           typename Q,
           typename F>
-void joinAlg(Iter first, Iter last,
+void joinAlgF(Iter first, Iter last,
              OutIter out,
              D delemiter,
              Q leftQuote,
@@ -256,7 +256,7 @@ template <typename Iter,
           typename OutIter,
           typename D,
           typename F>
-void joinAlg(Iter first, Iter last,
+void joinAlgF(Iter first, Iter last,
              OutIter out,
              D delemiter,
              F f,
@@ -382,8 +382,8 @@ void appendJoined(String& out,
   using namespace std;
 
   const size_t totalSize =
-    accumulate(begin(strings),
-               end(strings),
+    accumulate(cbegin(strings),
+               cend(strings),
                (size(strings)-1)+strLength(delemiter)+2,
                [](size_t l,const auto& r)
                {
@@ -402,7 +402,7 @@ template <typename String,
           typename D,
           typename Q,
           typename F>
-void appendJoined(String& out,
+void appendJoinedF(String& out,
                   const Container& container,
                   D delemiter,
                   Q leftQuote,
@@ -411,7 +411,7 @@ void appendJoined(String& out,
                   bool skipEmptyParts= true)
 {
   using namespace std;
-  joinAlg(cbegin(container),cend(container),
+  joinAlgF(cbegin(container),cend(container),
           back_inserter(out),
           delemiter,
           leftQuote, rightQuote,
@@ -423,14 +423,14 @@ template <typename String, /* necessarily */
           typename Container,
           typename D,
           typename F>
-void appendJoined(String& out,
+void appendJoinedF(String& out,
                   const Container& container,
                   D delemiter,
                   F f,
                   bool skipEmptyParts= true)
 {
   using namespace std;
-  joinAlg(cbegin(container),cend(container),
+  joinAlgF(cbegin(container),cend(container),
           back_inserter(out),
           delemiter,
           f,
@@ -465,7 +465,7 @@ template <typename String, /* necessarily */
           typename D,
           typename Q,
           typename F>
-auto join(const Container& container,
+auto joinF(const Container& container,
           D delemiter,
           Q leftQuote,
           Q rightQuote,
@@ -473,7 +473,7 @@ auto join(const Container& container,
           bool skipEmptyParts= true)
 {
   String out;
-  appendJoined(out,container,delemiter,leftQuote,rightQuote,f,skipEmptyParts);
+  appendJoinedF(out,container,delemiter,leftQuote,rightQuote,f,skipEmptyParts);
   return out;
 }
 //----------------------------------------------------------------------------
@@ -481,13 +481,13 @@ template <typename String, /* necessarily */
           typename Container,
           typename D,
           typename F>
-auto join(const Container& container,
+auto joinF(const Container& container,
           D delemiter,
           F f,
           bool skipEmptyParts= true)
 {
   String out;
-  appendJoined(out,container,delemiter,f,skipEmptyParts);
+  appendJoinedF(out,container,delemiter,f,skipEmptyParts);
   return out;
 }
 //----------------------------------------------------------------------------

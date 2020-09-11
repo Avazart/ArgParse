@@ -10,7 +10,7 @@ int main(/*int argc, char *argv[]*/)
   using namespace std;
   using namespace std::literals;
 
-  ArgParse::ArgumentParser<char> parser;
+  ArgParse::ArgumentParser<char> parser("-/");
   try
   {
     //  optional arg expected one or more values ('+')

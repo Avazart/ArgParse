@@ -10,17 +10,17 @@ void printArg(const T& arg)
   using namespace ArgParse;
 
   cout<<(arg.info()->argType()==ArgType::positional
-          ? "Positional ": "Optional ")
-       << "arg '" << arg.info()->fullName()<< "':\t";
+           ? "Positional ": "Optional ")
+      <<"arg '" << arg.info()->fullName()<< "':\t";
 
   if(!arg.exists())
   {
-    cout<< " not exists!"<<std::endl;
+    cout<<" not exists!"<<std::endl;
     return;
   }
 
   if(arg) cout<< arg.info()->valueAsString() <<std::endl;
-  else    cout<<"hasn't value!"<<std::endl;
+  else    cout<< "hasn't value!"<<std::endl;
 }
 //------------------------------------------------------------------
 int main(/*int argc, char *argv[]*/)

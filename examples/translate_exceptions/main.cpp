@@ -7,7 +7,7 @@
 #define OS_WINDOWS
 
 #ifdef OS_WINDOWS
-   #include <Windows.h>
+  #include <Windows.h>
 #endif
 //------------------------------------------------------------------
 int main(/*int argc, char *argv[]*/)
@@ -38,11 +38,11 @@ int main(/*int argc, char *argv[]*/)
   auto o = parser.addOptional<int,1,1>("-o","--opt");
   o.setRange(5,15);
   o.setHelp(u8"- опциональный аргумент");
-  auto subParser1 = parser.addSubParser("cmd1");
-  auto subParser2 = parser.addSubParser("cmd2");
+  auto subParser1= parser.addSubParser("cmd1");
+  auto subParser2= parser.addSubParser("cmd2");
 
-  cout<<"usage: "<< parser.usage() << endl << endl;
-  cout<< parser.help() << endl << endl;
+  cout<< "Usage: " << parser.usage() << endl << endl;
+  cout<< "Help:\n" << parser.help()  << endl << endl;
 
   for(const string& cmdLine: cmdLines)
   {
@@ -54,8 +54,8 @@ int main(/*int argc, char *argv[]*/)
       }
       catch(const ArgParse::Exception<char>& e)
       {
-        cout<<"\""<<cmdLine<<"\"  "<< endl;
-        cout<<"original: "<<  e.what() << endl;
+        cout<< "\"" << cmdLine<<"\"  "<< endl;
+        cout<< "original: " <<  e.what() << endl;
         throw;
       }
     }
@@ -63,9 +63,9 @@ int main(/*int argc, char *argv[]*/)
     {
       //  Error: argument 'p': expected values count: 2..3
       cout<< "translated: "
-          <<  u8"аргумент '" << StringUtils::join(e.arg()->optionStrings(),"/")<< "':"
-          <<  u8" должен содержать от "<< e.arg()->minCount()
-          <<  u8" до " << e.arg()->maxCount() <<  u8" значений."
+          << u8"аргумент '" << StringUtils::join(e.arg()->optionStrings(),"/") << "':"
+          << u8" должен содержать от "<< e.arg()->minCount()
+          << u8" до " << e.arg()->maxCount() <<  u8" значений."
           << endl;
       cout<< endl;
     }
@@ -74,11 +74,11 @@ int main(/*int argc, char *argv[]*/)
       // Error: argument 'p [p ...]' value:
       // 'abc' string length out of range [0..2]
       cout<< "translated: "
-          <<  u8"строковый аргумент '"
-          <<  StringUtils::join(e.arg()->optionStrings(),"/")<< "':"
-          <<  u8" должен быть длиной от "<< e.arg()->minValueAsString()
-          <<  u8" до " << e.arg()->maxValueAsString()
-          <<  u8" символов."
+          << u8"строковый аргумент '"
+          << StringUtils::join(e.arg()->optionStrings(),"/") << "':"
+          << u8" должен быть длиной от "<< e.arg()->minValueAsString()
+          << u8" до " << e.arg()->maxValueAsString()
+          << u8" символов."
           << endl;
       cout<< endl;
     }
@@ -86,52 +86,52 @@ int main(/*int argc, char *argv[]*/)
     {
       // original: Error: argument '-o': invalid int value: 'x'
       cout<< "translated: "
-          <<  u8"аргумент '"
-          <<  StringUtils::join(e.arg()->optionStrings(),"/")<< "':"
-          <<  u8" некорректное значение для типа "
-          <<  e.arg()->typeName()
-          <<  ": '"
-          <<  e.value()
-          <<  "'"
-          <<  endl;
+          << u8"аргумент '"
+          << StringUtils::join(e.arg()->optionStrings(),"/") << "':"
+          << u8" некорректное значение для типа "
+          << e.arg()->typeName()
+          << ": '"
+          << e.value()
+          << "'"
+          << endl;
       cout<< endl;
     }
     catch (const ArgParse::OutOfRangeException<char>& e)
     {
       // Error: argument 'o' value: '20' out of range [5..15]
       cout<< "translated: "
-          <<  u8"аргумент '"
-          <<  StringUtils::join(e.arg()->optionStrings(),"/")<< "':"
-          <<  u8" значение: '"
-          <<  e.value()
-          <<  u8"' выходит за границы ["
-          <<  e.arg()->minValueAsString() << ".."
-          <<  e.arg()->maxValueAsString() << "]"
-          <<  endl;
+          << u8"аргумент '"
+          << StringUtils::join(e.arg()->optionStrings(),"/")<< "':"
+          << u8" значение: '"
+          << e.value()
+          << u8"' выходит за границы ["
+          << e.arg()->minValueAsString() << ".."
+          << e.arg()->maxValueAsString() << "]"
+          << endl;
       cout<< endl;
     }
     catch (const ArgParse::UnrecognizedArgumentsException<char>& e)
     {
       // Error: unrecognized arguments: 'd'
       cout<< "translated: "
-          <<  u8"непредусмотренные аргументы: "
-          <<  StringUtils::join(e.values(),", ",'\'','\'')
-          <<  endl;
+          << u8"непредусмотренные аргументы: "
+          << StringUtils::join(e.values(),", ",'\'','\'')
+          << endl;
       cout<< endl;
     }
     catch (const ArgParse::InvalidChoiceException<char>& e)
     {
       // Error: invalid choice: 'cmd' (choose from 'cmd1', 'cmd2')
-      cout<<  "translated: "
-          <<  u8"неправильный выбор: '"
-          <<  e.value()
-          <<  u8"' (выбирете из "
-          <<  StringUtils::join(e.possibleChoice(),", ",'\'','\'')
-          <<  ")"
-          <<  endl;
+      cout<< "translated: "
+          << u8"неправильный выбор: '"
+          << e.value()
+          << u8"' (выбирете из "
+          << StringUtils::join(e.possibleChoice(),", ",'\'','\'')
+          << ")"
+          << endl;
       cout<< endl;
     }
-    parser.reset();
+    parser.reset(); // reset args values;
   }
   return 0;
 }
