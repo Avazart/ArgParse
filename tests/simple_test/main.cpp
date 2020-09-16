@@ -9,6 +9,19 @@
 using namespace ArgParse;
 using namespace std::literals;
 
+TEST(common, default_value)
+{
+  using namespace StringUtils;
+
+  ArgumentParser parser;
+  auto p0 = parser.addPositional<int,'+'>("p1");
+  p0 = std::vector<int>{1,2}; // default valus
+
+  ASSERT_NO_THROW(parser.parseCmdLine("3 4"));
+
+  ASSERT_EQ(*p0,(std::vector<int>{3,4}));
+}
+
 
 TEST(StringUtils, strToBool)
 {
@@ -260,7 +273,7 @@ TEST(positional,types)
   ASSERT_NO_THROW(parser.parseCmdLine("1 0 true false -10 3.14 -7.6e-8"s));
 
   ASSERT_TRUE(boolValues);
-  ASSERT_EQ(boolValues.values(),(std::vector<bool>{true,false,true,false}))<< "check bool 1/0 true/false";
+  ASSERT_EQ(*boolValues,(std::vector<bool>{true,false,true,false}))<< "check bool 1/0 true/false";
 
   ASSERT_TRUE(intValue);
   ASSERT_EQ(*intValue,-10) << "check negative int value";
@@ -725,6 +738,6 @@ int main(int argc, char *argv[])
 {
   ::testing::InitGoogleTest(&argc, argv);
   // // --gtest_filter="positional.one_or_more"
-  //::testing::GTEST_FLAG(filter) = "subParsers*";
+  //::testing::GTEST_FLAG(filter) = "positional.types";
   return RUN_ALL_TESTS();
 }

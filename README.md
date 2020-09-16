@@ -1,4 +1,4 @@
 Command line argument parser for C++ 
 
 
-Note: Requared C++17
+Note: C++17 required

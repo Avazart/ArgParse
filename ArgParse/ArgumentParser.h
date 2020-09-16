@@ -142,7 +142,7 @@ public:
         std::conditional_t< group==TypeGroup::number,
                             T,
                             std::conditional_t< group==TypeGroup::string,
-                                                const T&,
+                                                const String&,
                                                 const ValueContainer<T>&
                                               >
                           >;
@@ -184,7 +184,7 @@ public:
     if constexpr(group==TypeGroup::number)
       return toString<CharT>(storage());
     else if constexpr(group==TypeGroup::numbers)
-      return joinF<String>(storage_,", ",toString<CharT,T>,false);
+      return joinF<String>(storage(),", ",toString<CharT,T>,false);
     else if constexpr(group==TypeGroup::strings)
       return join(storage(),", ",'\"','\"',false);
     else
@@ -940,6 +940,7 @@ Iter ArgumentParser<CharT>::pasrePositional(Iter first, Iter last)
 
   for(auto argIt=begin(positionals_); argIt!=end(positionals_); ++argIt)
   {
+    (*argIt)->reset();
     (*argIt)->exists_= true;
 
     const size_t shouldRemain=
@@ -981,6 +982,7 @@ Iter ArgumentParser<CharT>::parseOptional(Iter first, Iter last)
       return first;
     }
 
+    arg->reset();
     arg->exists_= true;
     first= next(first);
 
@@ -1056,6 +1058,7 @@ void ArgumentParser<CharT>::parse(Iter first, Iter last)
   {
     assert(subParserIt != end(subParsers_));
 
+    (*subParserIt)->reset();
     (*subParserIt)->exists_= true;
     (*subParserIt)->parse(next(endOfMainParser),last);
   }

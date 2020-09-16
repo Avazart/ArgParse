@@ -16,7 +16,9 @@ int main(/*int argc, char *argv[]*/)
     //  optional arg expected one or more values ('+')
     //  required= false
     auto sumValues = parser.addOptional<float,'+'>("-s","--sum","/s");
-    // default: sumValues.setRequired(fasle);
+    // You can use:
+    // sumValues.setRequired(true);
+    // sumValues.setRange(0,1.0);
     auto multValues= parser.addOptional<float,'+'>("-m","--mult","/m");
 
     parser.parseCmdLine("/m 2 4.5 --sum 3.1 2.4");
