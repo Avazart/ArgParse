@@ -3,15 +3,19 @@
 //----------------------------------------------------------------------------
 #include <algorithm>
 #include <numeric>
+
 #include <string>
 #include <vector>
-#include <sstream>
-#include <type_traits>
+#include <unordered_set>
+#include <initializer_list>
+
+#include <optional>
 #include <memory>
+
+#include <type_traits>
 #include <functional>
 #include <limits>
-#include <optional>
-#include <type_traits>
+
 #include <iomanip>
 #include <cassert>
 //----------------------------------------------------------------------------
@@ -34,7 +38,19 @@ using ValueContainer = std::vector<T>;
 template <typename String>
 using StringContainer= std::vector<String>;
 
+template <typename T>
+using ChoiceSetContainer= std::unordered_set<T>;
+
 enum class ArgType{ invalid, positional, optional };
+enum class AssignResult
+{
+   success,
+   outOfRangeError,
+   rangeError,
+   lengthError,
+   invalidValueError,
+   invalidChoiceError
+};
 //----------------------------------------------------------------------------
 // pre define for friend access
 
@@ -50,8 +66,8 @@ template<typename CharT>
 class ArgInfo
 {
 public:
-  using String  = std::basic_string<CharT>;
-  using Strings = StringContainer<String>;
+  using String    = std::basic_string<CharT>;
+  using Strings   = StringContainer<String>;
 
   virtual ~ArgInfo()=default;
 
@@ -72,11 +88,10 @@ public:
 
   bool exists()const { return exists_; }
 
-  // purely virtual
-
-  virtual String valueAsString()const= 0;
-  virtual String maxValueAsString()const= 0;
-  virtual String minValueAsString()const= 0;
+  virtual String  valueAsString()const= 0;
+  virtual String  maxValueAsString()const= 0;
+  virtual String  minValueAsString()const= 0;
+  virtual Strings choicesAsStrings()const= 0;
 
   virtual bool hasValue()const= 0;
   virtual void reset()= 0;
@@ -86,7 +101,7 @@ public:
   virtual TypeGroup typeGroup()const= 0;
 
 protected:
-  virtual void assingOrAppendFromString(const String& str)= 0;
+  virtual AssignResult assingOrAppendFromString(const String& str)= 0;
 
 protected:
   friend ArgumentParser<CharT>;
@@ -127,6 +142,7 @@ public:
   using typename Base::String;
   using typename Base::Strings;
   using StringsConstIter= typename Base::Strings::const_iterator;
+  using Choices = ChoiceSetContainer<T>;
 
   using RangeValueType =
      std::conditional_t< TypeUtils::IsBasicStringV<T,CharT>,
@@ -134,32 +150,9 @@ public:
                          T>;
 
   using StorageType =
-        std::conditional_t< isSequence,
-                            ValueContainer<T>,
-                            std::optional<T>>;
-
-  using ValueType =
-        std::conditional_t< group==TypeGroup::number,
-                            T,
-                            std::conditional_t< group==TypeGroup::string,
-                                                const String&,
-                                                const ValueContainer<T>&
-                                              >
-                          >;
-
-  ValueType storage()const
-  {
-    if constexpr(isSequence)
-      return storage_;
-    else
-      return *storage_;
-  };
-
-
-  void assign(ValueType value)
-  {
-    storage_= value;
-  }
+     std::conditional_t< isSequence,
+                         ValueContainer<T>,
+                         std::optional<T>>;
 
   // ArgInfo
 
@@ -172,7 +165,7 @@ public:
       storage_.reset();
   }
 
-  virtual void assingOrAppendFromString(const String& str)override;
+  virtual AssignResult assingOrAppendFromString(const String& str)override;
 
   virtual std::size_t typeId()const   override{ return TypeInfo<T>::id; }
   virtual const char* typeName()const override{ return TypeInfo<T>::name; }
@@ -181,14 +174,26 @@ public:
   virtual String valueAsString()const override
   {
     using namespace StringUtils;
-    if constexpr(group==TypeGroup::number)
-      return toString<CharT>(storage());
-    else if constexpr(group==TypeGroup::numbers)
-      return joinF<String>(storage(),", ",toString<CharT,T>,false);
+    if constexpr(group==TypeGroup::numbers)
+      return joinF<String>(storage_,", ",toString<CharT,T>,false);
     else if constexpr(group==TypeGroup::strings)
-      return join(storage(),", ",'\"','\"',false);
+      return join(storage_,", ",'\"','\"',false);
+    else if constexpr(group==TypeGroup::number)
+      return toString<CharT>(*storage_);
     else
-      return storage();
+      return *storage_;
+  }
+
+  virtual Strings choicesAsStrings()const override
+  {
+    using namespace std;
+    using namespace StringUtils;
+    Strings strings;
+    transform(cbegin(choices_),
+              cend(choices_),
+              back_inserter(strings),
+              toString<CharT,T>);
+    return strings;
   }
 
   virtual String minValueAsString()const override
@@ -209,35 +214,55 @@ public:
       return storage_.has_value();
   }
 
+  void setChoices(const Choices& choices){ choices_ = choices; }
+  const Choices& choices() { return choices_; }
+
 private:
   std::pair<RangeValueType,RangeValueType> range_ =
       std::make_pair(std::numeric_limits<RangeValueType>::lowest(),
                      std::numeric_limits<RangeValueType>::max());
 
   StorageType storage_;
+  Choices choices_;
 };
 //---------------------------------------------------------------------------------------
 template< typename T, TypeGroup group, typename CharT>
-void ArgImpl<T, group, CharT>::
-   assingOrAppendFromString(const String& str)
-
+AssignResult
+  ArgImpl<T, group, CharT>::assingOrAppendFromString(const String& str)
 {
-  const T value = TypeInfo<T>::assignFromString(str);
-  if constexpr(group==TypeGroup::string || group==TypeGroup::strings)
+  try
   {
-    if(value.length() < range_.first || value.length() > range_.second)
-      throw std::length_error("length error");
-  }
-  else
-  {
-    if(value< range_.first || value> range_.second)
-       throw std::range_error("range error");
-  }
+    const T value = TypeInfo<T>::assignFromString(str);
+    if constexpr(group==TypeGroup::string || group==TypeGroup::strings)
+    {
+      if(value.length() < range_.first || value.length() > range_.second)
+        return AssignResult::lengthError;
+    }
+    else
+    {
+      if(value< range_.first || value> range_.second)
+        return AssignResult::rangeError;
+    }
 
-  if constexpr(group==TypeGroup::number || group==TypeGroup::string)
-    this->storage_= value;
-  else
-    this->storage_.push_back(value);
+    if(!choices_.empty() &&
+       choices_.find(value)==std::end(choices_))
+      return AssignResult::invalidChoiceError;
+
+    if constexpr(group==TypeGroup::number || group==TypeGroup::string)
+      this->storage_= value;
+    else
+      this->storage_.push_back(value);
+
+    return AssignResult::success;
+  }
+  catch (const std::out_of_range&)
+  {
+    return AssignResult::outOfRangeError;
+  }
+  catch (const std::invalid_argument&)
+  {
+    return AssignResult::invalidValueError;
+  }
 }
 //---------------------------------------------------------------------------------------
 //             BaseArg
@@ -246,10 +271,11 @@ template< typename T, TypeGroup group,typename CharT>
 class BaseArg
 {
 public:
-  using Impl = ArgImpl<T,group,CharT>;
-  using ValueType= typename Impl::ValueType;
+  using Impl= ArgImpl<T,group,CharT>;
+  using String = typename Impl::String;
+  using Strings = typename Impl::Strings;
   using RangeValueType= typename Impl::RangeValueType;
-  using String= std::basic_string<CharT>;
+  using Choices = ChoiceSetContainer<T>;
 
   explicit BaseArg(std::shared_ptr<Impl> impl):impl_(impl){}
 
@@ -258,9 +284,6 @@ public:
   bool hasValue()const { return impl_->hasValue(); }
   operator bool()const { return hasValue(); }
 
-  ValueType operator*()const    { return   impl_->storage(); }
-  const auto* operator->()const { return &(impl_->storage());}
-
   static constexpr TypeGroup typeGroup(){ return group; }
 
   void setRequired(bool required){ impl_->setRequired(required); };
@@ -268,6 +291,13 @@ public:
   void setHelp(const String& help){ impl_->setHelp(help); }
 
   const std::shared_ptr<Impl>& info()const{ return impl_; }
+
+  void setChoices(const Choices & choices){ impl_->setChoices(choices); }
+  const Choices& choices() { return impl_->choices(); }
+  void setChoices(std::initializer_list<T> choices)
+  {
+    impl_->setChoices(Choices(std::cbegin(choices),std::cend(choices)));
+  }
 
 protected:
   std::shared_ptr<Impl> impl_;
@@ -286,25 +316,35 @@ class Arg<T, TypeGroup::numbers, CharT>
 {
   using Base= BaseArg<T,TypeGroup::numbers,CharT>;
   using typename Base::RangeValueType;
-  using typename Base::ValueType;
 
 public:
   explicit Arg(std::shared_ptr<typename Base::Impl> impl):Base(impl){}
 
-  ValueType values()const
+  using Numbers = ValueContainer<T>;
+
+  const Numbers& values()const
   {
-    return this->impl_->storage();
+    return this->impl_->storage_;
   }
 
-  Arg& operator=(ValueType value)
+  const Numbers& operator*()const  { return Base::impl_->storage_; }
+  const Numbers* operator->()const { return &Base::impl_->storage_; }
+
+  Arg& operator=(const Numbers& values)
   {
-    this->impl_->assign(value);
+    Base::impl_->storage_ = values;
+    return *this;
+  }
+
+  Arg& operator=(std::initializer_list<T> values)
+  {
+    Base::impl_->storage_ = values;
     return *this;
   }
 
   void setRange(RangeValueType minValue,RangeValueType maxValue)
   {
-    this->impl_->range_= std::make_pair(minValue,maxValue);
+    Base::impl_->range_= std::make_pair(minValue,maxValue);
   }
 };
 //---------------------------------------------------------------------------------------
@@ -314,30 +354,40 @@ class Arg<T,TypeGroup::strings,CharT>
 {
   using Base= BaseArg<T,TypeGroup::strings,CharT>;
   using typename Base::RangeValueType;
-  using typename Base::ValueType;
+  using String = T;
+  using Strings = ValueContainer<String>;
 
 public:
   explicit Arg(std::shared_ptr<typename Base::Impl> impl):Base(impl){}
 
-  ValueType values()const
+  const Strings& values()const
   {
-    return this->impl_->storage();
+    return Base::impl_->storage_;
   }
 
-  Arg& operator=(ValueType value)
+  const Strings& operator*()const  { return Base::impl_->storage_; }
+  const Strings* operator->()const { return Base::impl_->storage_; }
+
+  Arg& operator=(const Strings& values)
   {
-    this->impl_->assign(value);
+    Base::impl_= values;
+    return *this;
+  }
+
+  Arg& operator=(std::initializer_list<String> values)
+  {
+    Base::impl_ = values;
     return *this;
   }
 
   void setMinLength(RangeValueType minLength)
   {
-    this->impl_->range_.first = minLength;
+    Base::impl_->range_.first = minLength;
   }
 
   void setMaxLength(RangeValueType maxLength)
   {
-    this->impl_->range_.second= maxLength;
+    Base::impl_->range_.second= maxLength;
   }
 };
 //---------------------------------------------------------------------------------------
@@ -347,26 +397,28 @@ class Arg<T,TypeGroup::number,CharT>
 {
   using Base= BaseArg<T,TypeGroup::number,CharT>;
   using typename Base::RangeValueType;
-  using typename Base::ValueType;
 
 public:
   explicit Arg(std::shared_ptr<typename Base::Impl> impl):Base(impl){}
 
-  ValueType value()const
+  T value()const
   {
-    return this->impl_->storage();
+    return *Base::impl_->storage_;
   }
 
-  Arg& operator=(ValueType value)
+  T operator*()const   { return *Base::impl_->storage_; }
+  const T* operator->()const { return &(*Base::impl_->storage_); }
+
+  Arg& operator=(T value)
   {
-    this->impl_->assign(value);
+    Base::impl_->storage_ = value;
     return *this;
   }
 
   void setRange(RangeValueType minValue,
                 RangeValueType maxValue)
   {
-    this->impl_->range_= std::make_pair(minValue,maxValue);
+    Base::impl_->range_= std::make_pair(minValue,maxValue);
   }
 };
 //---------------------------------------------------------------------------------------
@@ -376,30 +428,33 @@ class Arg<T,TypeGroup::string,CharT>
 {
   using Base= BaseArg<T,TypeGroup::string,CharT>;
   using typename Base::RangeValueType;
-  using typename Base::ValueType;
+  using String = std::basic_string<CharT>;
 
 public:
   explicit Arg(std::shared_ptr<typename Base::Impl> impl):Base(impl){}
 
-  ValueType value()const
+  const String& value()const
   {
-    return this->impl_->storage();
+    return *Base::impl_->storage_;
   }
 
-  Arg& operator=(ValueType value)
+  const String& operator*()const  { return *Base::impl_->storage_; }
+  const String* operator->()const { return &(*Base::impl_->storage_); }
+
+  Arg& operator=(const String& value)
   {
-    this->impl_->assign(value);
+    Base::impl_= value;
     return *this;
   }
 
   void setMinLength(RangeValueType minLength)
   {
-    this->impl_->range_.first= minLength;
+    Base::impl_->range_.first= minLength;
   }
 
   void setMaxLength(RangeValueType maxLength)
   {
-    this->impl_->range_.second= maxLength;
+    Base::impl_->range_.second= maxLength;
   }
 };
 //---------------------------------------------------------------------------------------
@@ -432,19 +487,19 @@ auto optionName(const StringContainer<String>& optionStrings,
   for(const auto& s:optionStrings)
   {
     auto it =
-      find_if_not(begin(s),next(begin(s),std::min(2u,size(s))),
+      find_if_not(cbegin(s),next(cbegin(s),std::min(2u,size(s))),
         [&prefixChars](auto c)
         {
           return prefixChars.find(c)!= String::npos;
         });
 
-    const size_t d= distance(begin(s),it);
+    const size_t d= distance(cbegin(s),it);
     if(d==0) // error d = 1 .. 2
        return String();
     if(d==2)
        name = String(it,end(s));
   }
-  transform(begin(name),end(name),begin(name),
+  transform(cbegin(name),cend(name),begin(name),
             [](auto c){ return toupper(c);});
   return name;
 }
@@ -582,10 +637,10 @@ public:
   using ArgInfoPtr= typename Exception<CharT>::ArgInfoPtr;
 
   InvalidChoiceException(const String& value,
-                         const Strings& possibleChoice)
+                         const Strings& choices)
     :Exception<CharT>(),
      value_(value),
-     possibleChoice_(possibleChoice)
+     choices_(choices)
   {
   }
 
@@ -596,15 +651,15 @@ public:
     using StringUtils::join;
     return
       "invalid choice: '"_lv+value_+"' "
-      "(choose from "_lv+join(possibleChoice_,", ",'\'','\'')+")"_lv;
+      "(choose from "_lv+join(choices_,", ",'\'','\'')+")"_lv;
   }
 
   const String&  value()const{ return value_; }
-  const Strings& possibleChoice()const{ return possibleChoice_; }
+  const Strings& choices()const{ return choices_; }
 
 private:
   String value_;
-  Strings possibleChoice_;
+  Strings choices_;
 };
 //----------------------------------------------------------------------------------
 template <typename CharT>
@@ -899,34 +954,37 @@ void ArgumentParser<CharT>::assignValues(
   if(count==0)
     return;
 
-  try
+  AssignResult result= AssignResult::success;
+
+  if(arg->typeGroup()==TypeGroup::number ||
+     arg->typeGroup()==TypeGroup::string)
   {
-     if(arg->typeGroup()==TypeGroup::number ||
-        arg->typeGroup()==TypeGroup::string)
+      result= arg->assingOrAppendFromString(*first);
+  }
+  else
+  {
+     for(; first!=last; ++first)
      {
-        arg->assingOrAppendFromString(*first);
-     }
-     else
-     {
-       for(;first!=last; ++first)
-         arg->assingOrAppendFromString(*first);
+        result= arg->assingOrAppendFromString(*first);
+        if(result!=AssignResult::success)
+          break;
      }
   }
-  catch (const std::out_of_range&)
+
+  switch(result)
   {
-    throw OutOfRangeException<CharT>(*first,arg);
-  }
-  catch (const std::range_error&)
-  {
-    throw OutOfRangeException<CharT>(*first,arg);
-  }
-  catch (const std::length_error&)
-  {
-    throw LengthErrorException<CharT>(*first,arg);
-  }
-  catch (const std::invalid_argument&)
-  {
-   throw InvalidArgumentException<CharT>(*first,arg);
+    case AssignResult::outOfRangeError:
+        throw OutOfRangeException<CharT>(*first,arg);
+    case AssignResult::invalidValueError:
+        throw InvalidArgumentException<CharT>(*first,arg);
+    case AssignResult::rangeError:
+        throw OutOfRangeException<CharT>(*first,arg);
+    case AssignResult::lengthError:
+        throw LengthErrorException<CharT>(*first,arg);
+    case AssignResult::invalidChoiceError:
+       throw InvalidChoiceException<CharT>(*first,arg->choicesAsStrings());
+
+    case AssignResult::success:{ /* ok! */ } break;
   }
 }
 //------------------------------------------------------------------
@@ -940,8 +998,7 @@ Iter ArgumentParser<CharT>::pasrePositional(Iter first, Iter last)
 
   for(auto argIt=begin(positionals_); argIt!=end(positionals_); ++argIt)
   {
-    (*argIt)->reset();
-    (*argIt)->exists_= true;
+    auto arg = *argIt;
 
     const size_t shouldRemain=
         accumulate(next(argIt), end(positionals_), 0u,
@@ -951,10 +1008,13 @@ Iter ArgumentParser<CharT>::pasrePositional(Iter first, Iter last)
         ? totalCount
         : totalCount-shouldRemain;
 
-    const size_t count= std::min((*argIt)->maxCount(),available);
+    const size_t count= std::min(arg->maxCount(),available);
     auto lastValue= next(first,count);
 
-    assignValues((*argIt),first,lastValue);
+    arg->reset();
+    arg->exists_= true;
+    assignValues(arg,first,lastValue);
+
     first= lastValue;
     totalCount -= count;
   }
@@ -981,9 +1041,6 @@ Iter ArgumentParser<CharT>::parseOptional(Iter first, Iter last)
       /* throw UnrecognizedArgumentsException<CharT>(Strings(first,last)); */
       return first;
     }
-
-    arg->reset();
-    arg->exists_= true;
     first= next(first);
 
     Iter nextOption=
@@ -993,7 +1050,10 @@ Iter ArgumentParser<CharT>::parseOptional(Iter first, Iter last)
     const size_t currentArgCount= std::min(count,arg->maxCount());
     Iter lastValue= next(first,currentArgCount);
 
+    arg->reset();
+    arg->exists_= true;
     assignValues(arg,first,lastValue);
+
     first= lastValue;
   }
 
@@ -1014,16 +1074,16 @@ void ArgumentParser<CharT>::parse(Iter first, Iter last)
   using StringUtils::hasPrefix;
 
   // find sub parser
-  auto subParserIt= end(subParsers_);
+  auto subParserIt= cend(subParsers_);
   auto endOfMainParser= find_if(first,last,
       [&](const auto& s)
       {
-        subParserIt= find_if(begin(subParsers_), end(subParsers_),
+        subParserIt= find_if(cbegin(subParsers_), cend(subParsers_),
             [&s](auto parser)
             {
               return parser->name_== s;
             });
-        return subParserIt != end(subParsers_);
+        return subParserIt != cend(subParsers_);
       });
 
   // find end positional-s args
@@ -1044,8 +1104,8 @@ void ArgumentParser<CharT>::parse(Iter first, Iter last)
     {
       Strings subParsersNames;
       subParsersNames.reserve(subParsers_.size());
-      transform(begin(subParsers_),
-                end(subParsers_),
+      transform(cbegin(subParsers_),
+                cend(subParsers_),
                 back_inserter(subParsersNames),
                 [](auto parser){ return parser->name_; });
 
@@ -1079,7 +1139,7 @@ void ArgumentParser<CharT>::parseArgs(int argc, const CharT *argv[])
 template<typename CharT>
 void ArgumentParser<CharT>::parseArgs(const ArgumentParser::Strings &args)
 {
-  parse(std::begin(args),std::end(args));
+  parse(std::cbegin(args),std::cend(args));
 }
 //------------------------------------------------------------------
 template<typename CharT>

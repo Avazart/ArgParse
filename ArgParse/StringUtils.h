@@ -153,10 +153,13 @@ auto strToLongDouble(const std::basic_string<CharT>& s)
      detail::convert<long double>(s,std::strtold,std::wcstold);
 };
 //----------------------------------------------------------------------------
-template <typename CharT,typename Number>
-inline std::basic_string<CharT> toString(Number number)
+template <typename CharT,typename T>
+std::basic_string<CharT> toString(T value)
 {
-  return LatinView(std::to_string(number));
+  if constexpr(std::is_same_v<T, std::basic_string<CharT>>)
+    return value;
+  else
+    return LatinView(std::to_string(value));
 }
 //----------------------------------------------------------------------------
 inline int isQuote(int c)

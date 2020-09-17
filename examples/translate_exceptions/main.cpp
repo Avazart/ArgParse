@@ -46,15 +46,15 @@ int main(/*int argc, char *argv[]*/)
 
   for(const string& cmdLine: cmdLines)
   {
+    cout<< "CmdLine: \"" << cmdLine<<"\"  "<< endl;
     try
     {
       try
-      {
+      {   
         parser.parseCmdLine(cmdLine);
       }
       catch(const ArgParse::Exception<char>& e)
-      {
-        cout<< "\"" << cmdLine<<"\"  "<< endl;
+      {        
         cout<< "original: " <<  e.what() << endl;
         throw;
       }
@@ -126,7 +126,7 @@ int main(/*int argc, char *argv[]*/)
           << u8"неправильный выбор: '"
           << e.value()
           << u8"' (выбирете из "
-          << StringUtils::join(e.possibleChoice(),", ",'\'','\'')
+          << StringUtils::join(e.choices(),", ",'\'','\'')
           << ")"
           << endl;
       cout<< endl;

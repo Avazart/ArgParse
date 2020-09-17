@@ -15,21 +15,26 @@ int main(/*int argc, char *argv[]*/)
   {
     //  optional arg expected one or more values ('+')
     //  required= false
-    auto sumValues = parser.addOptional<float,'+'>("-s","--sum","/s");
+    auto sumValues = parser.addOptional<int,'+'>("-s","--sum","/s");
     // You can use:
     // sumValues.setRequired(true);
-    // sumValues.setRange(0,1.0);
+    // sumValues.setRange(0,10);
+    // sumValues.setChoices({1, 5});
+
     auto multValues= parser.addOptional<float,'+'>("-m","--mult","/m");
 
-    parser.parseCmdLine("/m 2 4.5 --sum 3.1 2.4");
+    const string  cmdLine = "/m 2.3 2.4 --sum 5 2";
+    cout << cmdLine << endl;
+    parser.parseCmdLine(cmdLine);
+
     //  Or use:
     //  parser.parseArgs(argc,argv);
 
     if(sumValues.exists())
     {
-      const float sum= accumulate(begin(sumValues.values()),
-                                  end(sumValues.values()),
-                                  0.f);
+      const int sum= accumulate(begin(sumValues.values()),
+                                end(sumValues.values()),
+                                0);
       cout << "sum= " << sum << endl;
     }
 
